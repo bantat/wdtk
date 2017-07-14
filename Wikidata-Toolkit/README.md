@@ -3,6 +3,8 @@ Wikidata Toolkit Project Usage
 
 I cloned the whole wdtk library because it is easier to manage for project - editing some of the source files/configurations
 
+Original work located in wdtk-examples directory
+
 Wikidata Toolkit is a Java library for accessing Wikidata and other Wikibase installations. It can be used to create bots, to perform data extraction tasks (e.g., convert all data in Wikidata to a new format), and to do large-scale analyses that are too complex for using a simple SPARQL query service.
 
 Documentation
