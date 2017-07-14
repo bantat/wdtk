@@ -1,0 +1,125 @@
+<html>
+  <head>
+    <title>wtf_wikipedia</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script type="text/javascript" src="./docs.js"></script>
+    <script src="https://code.jquery.com/jquery-latest.js"></script>
+    <script type="text/javascript" src="../builds/wtf_wikipedia.js"></script>
+    <style>
+      h1{
+        color:#d76d6b;
+        margin:30px;
+      }
+      h2{color:steelblue;}
+      .c{color:#858585; font-size:15px;}
+      a{
+        color:#d76d6b;
+        text-decoration:none;
+      }
+      .r{color:steelblue; position:relative; left:70px;}
+
+      #wikiscript{
+        border:1px solid steelblue;
+        font-size:11px;
+        border-radius:5px;
+        width:90%;
+        height:250px;
+        margin:0px 3% 10px 3%;
+        overflow:auto;
+      }
+      .page{
+        padding-left:25px;
+        color:steelblue;
+        text-decoration:underline;
+      }
+    </style>
+    <script>
+      $(window).ready(function(){
+
+        var make_list=function(arr){
+          console.log(arr)
+          arr = arr || []
+          return arr.reduce(function(str,o){
+            return str+='<li>'+o+'</li>'
+          },'')
+        }
+        var makeImg=function(arr){
+          console.log(arr)
+          arr = arr || []
+          return arr.reduce(function(str,o){
+            return str+='<img style="width:100px;" src="'+o.url+'"/>'
+          },'')
+        }
+
+        var parse=function(){
+          var wikiscript=$("#wikiscript").val()
+          var text= wtf_wikipedia.plaintext(wikiscript)
+          $("#text").html(text);
+          var obj= wtf_wikipedia.parse(wikiscript);
+          console.log(obj)
+          $("#categories").html('<ul>'+make_list(obj.categories)+'</ul>');
+          $("#images").html('<ul>'+makeImg(obj.images)+'</ul>');
+          $("#translations").html('<ul><pre>'+JSON.stringify(obj.translations,null,2)+'</pre></ul>');
+          $("#infobox").html(JSON.stringify(obj.infobox,null,2));
+        }
+
+        var el = document.getElementById("wikiscript");
+        parse()
+
+        var pages=Object.keys(window.demo_pages).reduce(function(str,p){
+          return str +'<a href="#" class="page">'+p+'</a>'
+        },'')
+        $("#pages").html(pages)
+
+        $(".page").click(function(e){
+          console.log(e.target.text)
+          var str=e.target.text
+          el.value=window.demo_pages[str]
+          parse()
+        })
+
+        el.addEventListener("input", parse, false);
+        $(".page:first").click()
+      })
+    </script>
+  </head>
+  <body>
+    <div>
+      <a href="https://github.com/spencermountain/wtf_wikipedia">wtf_wikipedia</a>
+      <span style="padding-left:15px; color:grey;"> - parsing demo</span>
+    </div>
+    <ul>
+      demo pages:
+      <div id="pages"></div>
+    </ul>
+    <textarea id="wikiscript" value=''></textarea>
+
+    <ul>
+      <h2>PlainText:</h2>
+      <ul>
+        <div id="text"></div>
+      </ul>
+
+      <h2>Categories:</h2>
+      <ul>
+        <div id="categories"></div>
+      </ul>
+
+      <h2>Images:</h2>
+      <ul>
+        <div id="images"></div>
+      </ul>
+
+      <h2>Translations:</h2>
+      <ul>
+        <div id="translations"></div>
+      </ul>
+
+      <h2>Infobox:</h2>
+      <ul>
+        <pre id="infobox"></pre>
+      </ul>
+    </ul>
+
+  </body>
+<html>
