@@ -109,6 +109,8 @@ public class WikiArtistNetwork {
 
         System.out.println("Graph built");
 
+        //test comment
+
         //MaximumFlowAlgorithm<String, DefaultEdge> flow = new MaximumFlowAlgorithm.MaximumFlowImpl<>();
 
 //        BreadthFirstIterator<String, DefaultEdge> iterator = new BreadthFirstIterator(graph, "Kendrick Lamar");
