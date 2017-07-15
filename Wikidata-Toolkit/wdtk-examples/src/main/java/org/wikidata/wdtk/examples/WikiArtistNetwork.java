@@ -1,11 +1,8 @@
 package org.wikidata.wdtk.examples;
 
 import org.jgrapht.Graph;
-import org.jgrapht.alg.interfaces.MaximumFlowAlgorithm;
 import org.jgrapht.graph.DefaultEdge;
-import org.jgrapht.graph.DirectedMultigraph;
 import org.jgrapht.graph.DirectedPseudograph;
-import org.jgrapht.traverse.BreadthFirstIterator;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -24,7 +21,6 @@ public class WikiArtistNetwork {
     static ArrayList<String> genres = new ArrayList<>();
     static ArrayList<String> labels = new ArrayList<>();
     static ArrayList<String> categories = new ArrayList<>();
-    static ArrayList<DefaultEdge> artistLinks = new ArrayList<>();
     static ArrayList<String> vevoArtists = new ArrayList<>();
 
     public static void buildComponentFromGenres(JSONArray genreArray, String artist) {
@@ -70,6 +66,7 @@ public class WikiArtistNetwork {
                 artists.add(associatedArtist);
                 if (!graph.containsVertex(associatedArtist)) graph.addVertex(associatedArtist);
             }
+            //if (!graph.containsEdge(artist, associatedArtist)) graph.addEdge(artist, associatedArtist);
             graph.addEdge(artist, associatedArtist);
         }
     }
@@ -109,36 +106,41 @@ public class WikiArtistNetwork {
 
         System.out.println("Graph built");
 
-        //test comment
+        String artist = "TV on the Radio";
 
-        //MaximumFlowAlgorithm<String, DefaultEdge> flow = new MaximumFlowAlgorithm.MaximumFlowImpl<>();
+        BreadthFirstInfiniterator<String, DefaultEdge> iterator = new BreadthFirstInfiniterator<>(graph, artist);
 
-//        BreadthFirstIterator<String, DefaultEdge> iterator = new BreadthFirstIterator(graph, "Kendrick Lamar");
-//
-//        Map<String, Integer> map = new HashMap<>();
-//
-//        while (iterator.hasNext()) {
-//            String item = iterator.;
-//            if (wiki.vevoArtists.contains(item)) {
-//
-//                if (!map.containsKey(item)) map.put(item, 1);
-//                else map.put(item, map.get(item) + 1);
-//            }
-//        }
-//
-//        Set<Map.Entry<String, Integer>> set = map.entrySet();
-//        List<Map.Entry<String, Integer>> list = new ArrayList<>(set);
-//        Collections.sort(list, new Comparator<Map.Entry<String, Integer>>()
-//        {
-//            public int compare( Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2 )
-//            {
-//                return (o2.getValue()).compareTo( o1.getValue() );
-//            }
-//        });
-//
-//        for (int i = 0; i < 10; i++) {
-//            System.out.println(list.get(i));
-//        }
+        Map<String, Integer> map = new HashMap<>();
+
+        Integer count = 0;
+
+        while (iterator.hasNext() && count < 10000) {
+            String item = iterator.next();
+            if (wiki.vevoArtists.contains(item) && !item.equals(artist)) {
+                if (!map.containsKey(item)) map.put(item, 1);
+                else map.put(item, map.get(item) + 1);
+            }
+            count++;
+        }
+
+        Set<Map.Entry<String, Integer>> set = map.entrySet();
+        List<Map.Entry<String, Integer>> list = new ArrayList<>(set);
+        Collections.sort(list, new Comparator<Map.Entry<String, Integer>>()
+        {
+            public int compare( Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2 )
+            {
+                return (o2.getValue()).compareTo( o1.getValue() );
+            }
+        });
+
+        System.out.println();
+        System.out.println("Searching for artists related to " + artist);
+        System.out.println();
+        System.out.println("Results:");
+
+        for (int i = 0; i < 10; i++) {
+            System.out.println(list.get(i));
+        }
     }
 
 }
