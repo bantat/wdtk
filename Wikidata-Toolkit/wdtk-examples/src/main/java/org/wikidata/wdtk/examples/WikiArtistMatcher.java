@@ -334,8 +334,6 @@ public class WikiArtistMatcher {
         EntityDocument entityP2013 = wiki.wbdf.getEntityDocument("P2013");  // FB ID
         EntityDocument entityP2002 = wiki.wbdf.getEntityDocument("P2002");  // Twitter
 
-
-
         Set<PropertyIdValue> properties = new HashSet<>();
 
         properties.add(((PropertyDocument) entityP31).getPropertyId());

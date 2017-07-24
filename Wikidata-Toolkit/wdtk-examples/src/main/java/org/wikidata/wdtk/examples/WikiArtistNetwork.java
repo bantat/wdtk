@@ -1,6 +1,6 @@
 package org.wikidata.wdtk.examples;
 
-import org.jgrapht.Graph;
+import org.jgrapht.DirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.graph.DirectedPseudograph;
 import org.json.JSONArray;
@@ -10,12 +10,15 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.*;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Created by torebanta on 7/13/17.
  */
 public class WikiArtistNetwork {
 
-    static Graph<String, DefaultEdge> graph = new DirectedPseudograph<>(DefaultEdge.class);
+    static DirectedGraph<String, DefaultEdge> graph = new DirectedPseudograph<>(DefaultEdge.class);
 
     static ArrayList<String> artists = new ArrayList<>();
     static ArrayList<String> genres = new ArrayList<>();
@@ -106,7 +109,12 @@ public class WikiArtistNetwork {
 
         System.out.println("Graph built");
 
-        String artist = "TV on the Radio";
+        System.out.println("Num genres: " + genres.size());
+        System.out.println("Num categories: " + categories.size());
+        System.out.println("Num labels: " + labels.size());
+        System.out.println("Num vertices: " + graph.vertexSet().size());
+
+        String artist = "Outkast";
 
         BreadthFirstInfiniterator<String, DefaultEdge> iterator = new BreadthFirstInfiniterator<>(graph, artist);
 

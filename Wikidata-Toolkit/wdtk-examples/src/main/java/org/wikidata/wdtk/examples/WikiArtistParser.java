@@ -1,6 +1,9 @@
 package org.wikidata.wdtk.examples;
 
+import javafx.util.converter.BigIntegerStringConverter;
 import jdk.nashorn.api.scripting.ScriptObjectMirror;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.io.IOUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -13,7 +16,9 @@ import org.wikidata.wdtk.wikibaseapi.apierrors.MediaWikiApiErrorException;
 
 import javax.script.*;
 import java.io.*;
+import java.math.BigInteger;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * Created by torebanta on 7/5/17.
@@ -25,7 +30,52 @@ public class WikiArtistParser {
     static Invocable invocable;
     static ScriptEngine engine;
 
+    public JSONObject parseCSVtoJsonViews(String filePath) throws IOException {
+        try (Reader in = new FileReader(filePath);) {
+            Iterable<CSVRecord> records = CSVFormat.EXCEL.withHeader(
+                    "artist_id+1:13", "is_lift", "is_enabled", "total_views", "month_views", "week_views", "day_views",
+                    "twitter_id", "facebook_id", "name", "total_videos").parse(in);
+
+            System.out.println("Records built");
+            Boolean header = true;
+            JSONObject artists = new JSONObject();
+
+
+            for (CSVRecord record : records) {
+                if (header) header = false;
+
+                else {
+                    if (record.get("total_views").length() < 4 && !record.get("total_views").equals("")
+                            && !record.get("total_videos").equals("")) {
+                        try {
+                            if (Integer.parseInt(record.get("total_views")) == 0
+                                    || Integer.parseInt(record.get("total_videos")) == 0) continue;
+                        } catch (java.lang.NumberFormatException e) {
+                            continue;
+                        }
+                    }
+                    if (!Pattern.matches("^[a-z-0-9]+$", record.get("artist_id+1:13"))) continue;
+                    if (Pattern.matches("^[0-9]+$", record.get("artist_id+1:13"))) continue;
+                    String vevoId = record.get("artist_id+1:13");
+                    String views = "0";
+                    try {
+                        views = record.get("total_views");
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        System.out.println(record.get("total_views"));
+                        System.out.println(vevoId);
+                    }
+
+                    artists.put(vevoId, views);
+                }
+            }
+            return artists;
+        }
+    }
+
     public JSONObject getWikiPropertiesFromDocument(ItemDocument artistDocument, JSONObject artistJson) {
+        artistJson.put("title", "");
+        artistJson.put("label", "");
         try {
             Map<String, SiteLink> links = artistDocument.getSiteLinks();
             SiteLink link = links.get("enwiki");
@@ -228,104 +278,192 @@ public class WikiArtistParser {
 
         /* SETUP COMPLETE */
 
-        /* ************** Filter Categories ************** */
+        File file = new File(wiki.getClass().getClassLoader().getResource("artists-ALL-FINAL.json").getPath());
 
-        File file = new File(wiki.getClass().getClassLoader().getResource("wiki-data-module-fixed.json").getPath());
+        JSONArray artistArray = new JSONArray(new Scanner(file).useDelimiter("\\Z").next());
 
-        JSONObject wikiJson = new JSONObject(new Scanner(file).useDelimiter("\\Z").next());
+        File file2 = new File(wiki.getClass().getClassLoader().getResource("wiki-data-ALL-FINAL.json").getPath());
 
-        ArrayList<String> categories = new ArrayList<>();
-        ArrayList<String> sharedCategories = new ArrayList<>();
-        Map<String, Integer> map = new HashMap<>();
+        JSONObject wikiJson = new JSONObject(new Scanner(file2).useDelimiter("\\Z").next());
 
-        for (String key : wikiJson.keySet()) {
-            JSONObject artist = wikiJson.getJSONObject(key);
-            if (artist.has("categories")) {
-                JSONArray categoriesArray = artist.getJSONArray("categories");
-                for (int i = 0; i < categoriesArray.length(); i++) {
-                    String item = categoriesArray.getString(i);
-                    if (!categories.contains(item)) {
-                        categories.add(item);
-                    } else if (!sharedCategories.contains(item)) {
-                        sharedCategories.add(item);
-                        map.put(item, 1);
-                    } else {
-                        map.put(item, map.get(item) + 1);
-                    }
-                }
+        WikiArtistMatcher wiki2 = new WikiArtistMatcher();
+
+        JSONObject artistsJson = wiki.parseCSVtoJsonViews(wiki.getClass().getClassLoader().getResource("artists-simplified.csv").getPath());
+
+        Map<String, BigInteger> map = new HashMap<>();
+
+        for (String artist : artistsJson.keySet()) {
+            String viewString = artistsJson.getString(artist);
+            try {
+                map.put(artist, new BigInteger(viewString));
+            } catch (Exception e) {
+                map.put(artist, new BigInteger("0"));
             }
         }
 
-//        Set<Map.Entry<String, Integer>> set = map.entrySet();
-//        List<Map.Entry<String, Integer>> list = new ArrayList<>(set);
-//        Collections.sort( list, new Comparator<Map.Entry<String, Integer>>()
-//        {
-//            public int compare( Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2 )
-//            {
-//                return (o2.getValue()).compareTo( o1.getValue() );
-//            }
-//        });
-//
-//        System.out.println(list);
+        Set<Map.Entry<String, BigInteger>> set = map.entrySet();
+        List<Map.Entry<String, BigInteger>> list = new ArrayList<>(set);
+        Collections.sort(list, new Comparator<Map.Entry<String, BigInteger>>()
+        {
+            public int compare( Map.Entry<String, BigInteger> o1, Map.Entry<String, BigInteger> o2 )
+            {
+                return (o2.getValue()).compareTo( o1.getValue() );
+            }
+        });
 
-//        System.out.println(categories.size() + " unique categories");
-//        System.out.println(sharedCategories.size() + " shared categories");
+        JSONObject verifiedArtists = new JSONObject();
 
-        ArrayList<String> toFilter = new ArrayList<>();
-        toFilter.add("Category:Living people");
-        toFilter.add("Category:Commandeurs of the Ordre des Arts et des Lettres");
-        toFilter.add("Officers Crosses of the Order of Merit of the Federal Republic of Germany");
-
-        for (String category : categories) {
-            String simplified = category.toLowerCase();
-            if (simplified.contains("births")) toFilter.add(category);
-            if (simplified.contains("deaths")) toFilter.add(category);
-            if (simplified.contains("alumni")) toFilter.add(category);
-            if (simplified.contains("winner")) toFilter.add(category);
-            if (simplified.contains("actor")) toFilter.add(category);
-            if (simplified.contains("actress")) toFilter.add(category);
-//            if (simplified.contains("christian")) toFilter.add(category);
-//            if (simplified.contains("jew")) toFilter.add(category);
-            if (simplified.contains("business")) toFilter.add(category);
-            if (simplified.contains("model")) toFilter.add(category);
-            if (simplified.contains("designer")) toFilter.add(category);
+        for (int i = 0; i < artistArray.length(); i++) {
+            JSONObject artist = artistArray.getJSONObject(i);
+            if (artist.getBoolean("verified") && !artist.getString("title").equals("")) verifiedArtists.put(artist.getString("vevo"), artist.getString("title"));
         }
 
-//        ArrayList<String> filtered = new ArrayList<>();
+        System.out.println(verifiedArtists.length());
+
+        for (int i = 0; i < 5000; i++) {
+            String artist = list.get(i).getKey();
+            if (!verifiedArtists.has(artist)) System.out.println(artist);
+        }
+
+//        int count = 0;
 //
-//        for (String category : categories) {
-//            if (!toFilter.contains(category)) {
-//                filtered.add(category);
-//                //if (map.containsKey(category)) System.out.println(category + ": " + map.get(category));
+//        for (int i = 0; i < artistArray.length(); i++) {
+//            JSONObject artist = artistArray.getJSONObject(i);
+//            if (artist.getBoolean("verified") && wikiJson.has(artist.getString("title"))) count++;
+//        }
+//
+//        System.out.println(count);
+
+//        File file = new File(wiki.getClass().getClassLoader().getResource("artists-verified.json").getPath());
+//
+//        JSONArray array = new JSONArray(new Scanner(file).useDelimiter("\\Z").next());
+//
+//        System.out.println(array.toList().size());
+//
+//        for (int i = 0; i < array.length(); i++) {
+//            JSONObject artist = array.getJSONObject(i);
+//            if (!artist.has("wiki")) artist.put("wiki", "");
+//            if (!artist.has("title")) artist.put("title", "");
+//            if (!artist.has("label")) artist.put("label", "");
+//        }
+//
+//        for (int i = 0; i < array.length(); i++) {
+//            JSONObject artist = array.getJSONObject(i);
+//            if (artist.getString("name").equals(artist.getString("title")) || artist.getString("name").equals(artist.getString("label"))) {
+//                artist.put("verified", true);
 //            }
 //        }
+//
+//        PrintWriter writer = null;
+//
+//        try {
+//            writer = new PrintWriter("artists-verified-string.json", "UTF-8");
+//        } catch (IOException e) {
+//            System.out.println("Could not write result file");
+//            System.exit(1);
+//        }
+//
+//        writer.print(array);
+//        writer.close();
 
-        //System.out.println(toFilter);
-        //System.out.println(toFilter.size() + " categories to be fitered out of " + categories.size());
-        //System.out.println(filtered);
+        /* ************** Filter Categories ************** */
 
-        for (String key : wikiJson.keySet()) {
-            JSONObject artist = wikiJson.getJSONObject(key);
-            if (artist.has("categories")) {
-                JSONArray categoriesArray = artist.getJSONArray("categories");
-                for (int i = 0; i < categoriesArray.length(); i++) {
-                    String item = categoriesArray.getString(i);
-                    if (toFilter.contains(item)) categoriesArray.remove(i);
-                }
-            }
-        }
-
-        PrintWriter writer = null;
-
-        try {
-            writer = new PrintWriter("wiki-data-categories-filtered.json", "UTF-8");
-        } catch (IOException e) {
-            System.out.println("Could not write result file");
-            System.exit(1);
-        }
-
-        writer.print(wikiJson);
-        writer.close();
+//        File file = new File(wiki.getClass().getClassLoader().getResource("wiki-data-module-fixed.json").getPath());
+//
+//        JSONObject wikiJson = new JSONObject(new Scanner(file).useDelimiter("\\Z").next());
+//
+//        ArrayList<String> categories = new ArrayList<>();
+//        ArrayList<String> sharedCategories = new ArrayList<>();
+//        Map<String, Integer> map = new HashMap<>();
+//
+//        for (String key : wikiJson.keySet()) {
+//            JSONObject artist = wikiJson.getJSONObject(key);
+//            if (artist.has("categories")) {
+//                JSONArray categoriesArray = artist.getJSONArray("categories");
+//                for (int i = 0; i < categoriesArray.length(); i++) {
+//                    String item = categoriesArray.getString(i);
+//                    if (!categories.contains(item)) {
+//                        categories.add(item);
+//                    } else if (!sharedCategories.contains(item)) {
+//                        sharedCategories.add(item);
+//                        map.put(item, 1);
+//                    } else {
+//                        map.put(item, map.get(item) + 1);
+//                    }
+//                }
+//            }
+//        }
+//
+////        Set<Map.Entry<String, Integer>> set = map.entrySet();
+////        List<Map.Entry<String, Integer>> list = new ArrayList<>(set);
+////        Collections.sort( list, new Comparator<Map.Entry<String, Integer>>()
+////        {
+////            public int compare( Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2 )
+////            {
+////                return (o2.getValue()).compareTo( o1.getValue() );
+////            }
+////        });
+////
+////        System.out.println(list);
+//
+////        System.out.println(categories.size() + " unique categories");
+////        System.out.println(sharedCategories.size() + " shared categories");
+//
+//        ArrayList<String> toFilter = new ArrayList<>();
+//        toFilter.add("Category:Living people");
+//        toFilter.add("Category:Commandeurs of the Ordre des Arts et des Lettres");
+//        toFilter.add("Officers Crosses of the Order of Merit of the Federal Republic of Germany");
+//
+//        for (String category : categories) {
+//            String simplified = category.toLowerCase();
+//            if (simplified.contains("births")) toFilter.add(category);
+//            if (simplified.contains("deaths")) toFilter.add(category);
+//            if (simplified.contains("alumni")) toFilter.add(category);
+//            if (simplified.contains("winner")) toFilter.add(category);
+//            if (simplified.contains("actor")) toFilter.add(category);
+//            if (simplified.contains("actress")) toFilter.add(category);
+////            if (simplified.contains("christian")) toFilter.add(category);
+////            if (simplified.contains("jew")) toFilter.add(category);
+//            if (simplified.contains("business")) toFilter.add(category);
+//            if (simplified.contains("model")) toFilter.add(category);
+//            if (simplified.contains("designer")) toFilter.add(category);
+//        }
+//
+////        ArrayList<String> filtered = new ArrayList<>();
+////
+////        for (String category : categories) {
+////            if (!toFilter.contains(category)) {
+////                filtered.add(category);
+////                //if (map.containsKey(category)) System.out.println(category + ": " + map.get(category));
+////            }
+////        }
+//
+//        //System.out.println(toFilter);
+//        //System.out.println(toFilter.size() + " categories to be fitered out of " + categories.size());
+//        //System.out.println(filtered);
+//
+//        for (String key : wikiJson.keySet()) {
+//            JSONObject artist = wikiJson.getJSONObject(key);
+//            if (artist.has("categories")) {
+//                JSONArray categoriesArray = artist.getJSONArray("categories");
+//                for (int i = 0; i < categoriesArray.length(); i++) {
+//                    String item = categoriesArray.getString(i);
+//                    if (toFilter.contains(item)) categoriesArray.remove(i);
+//                }
+//            }
+//        }
+//
+//        PrintWriter writer = null;
+//
+//        try {
+//            writer = new PrintWriter("wiki-data-categories-filtered.json", "UTF-8");
+//        } catch (IOException e) {
+//            System.out.println("Could not write result file");
+//            System.exit(1);
+//        }
+//
+//        writer.print(wikiJson);
+//        writer.close();
 
         /* ************** Parse module entities ************** */
 
@@ -363,7 +501,7 @@ public class WikiArtistParser {
 //        writer.close();
 
 
-        /* ************** Add Wiki title/label to Json ************** */
+        /* ************** Generate wiki data ************** */
 //
 //        File file = new File(wiki.getClass().getClassLoader().getResource("artists-updated.json").getPath());
 //
