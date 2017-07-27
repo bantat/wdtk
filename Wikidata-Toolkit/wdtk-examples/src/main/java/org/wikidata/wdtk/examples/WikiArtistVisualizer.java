@@ -16,10 +16,13 @@ import javax.swing.JApplet;
 import org.jgraph.JGraph;
 import org.jgraph.graph.*;
 
+import org.jgrapht.Graph;
+import org.jgrapht.Graphs;
 import org.jgrapht.ListenableGraph;
 import org.jgrapht.ext.JGraphModelAdapter;
 import org.jgrapht.graph.ListenableDirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
+import org.jgrapht.graph.Subgraph;
 import org.json.JSONObject;
 
 /**
@@ -54,11 +57,27 @@ public class WikiArtistVisualizer extends JApplet {
 
         wiki.buildGraph(wikiJson);
 
+        String artist = "MGMT";
+
+        List<String> neighbors = Graphs.neighborListOf(wiki.graph, artist);
+        Set<String> nodeList = new HashSet<>();
+        nodeList.add(artist);
+
+        for (String neighbor : neighbors) {
+            if (!nodeList.contains(neighbor)) nodeList.add(neighbor);
+            List<String> secondNeighbors = Graphs.neighborListOf(wiki.graph, neighbor);
+            for (String secondNeighbor : secondNeighbors) {
+                if (!nodeList.contains(secondNeighbor)) nodeList.add(secondNeighbor);
+            }
+        }
+
+        Graph subGraph = new Subgraph(wiki.graph, nodeList);
+
         // create a JGraphT graph
         //ListenableGraph g = new ListenableDirectedGraph( DefaultEdge.class );
 
         // create a visualization using JGraph, via an adapter
-        m_jgAdapter = new JGraphModelAdapter( wiki.graph );
+        m_jgAdapter = new JGraphModelAdapter( subGraph );
 
         JGraph jgraph = new JGraph( m_jgAdapter );
 
@@ -88,8 +107,8 @@ public class WikiArtistVisualizer extends JApplet {
             double x = 0.0;
             double y = 0.0;
             while (unique.size() == currentSize) {
-                x = r.nextInt(10000);
-                y = r.nextInt(10000);
+                x = r.nextInt(1000);
+                y = r.nextInt(1000);
                 unique.add(new Point2D.Double(x,y));
             }
             bounds.setRect(x, y, bounds.getWidth(), bounds.getHeight());

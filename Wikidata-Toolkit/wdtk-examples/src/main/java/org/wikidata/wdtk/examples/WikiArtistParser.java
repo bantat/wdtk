@@ -282,48 +282,71 @@ public class WikiArtistParser {
 
         JSONArray artistArray = new JSONArray(new Scanner(file).useDelimiter("\\Z").next());
 
-        File file2 = new File(wiki.getClass().getClassLoader().getResource("wiki-data-ALL-FINAL.json").getPath());
+        File file2 = new File(wiki.getClass().getClassLoader().getResource("duplicates-to-unverify.txt").getPath());
 
-        JSONObject wikiJson = new JSONObject(new Scanner(file2).useDelimiter("\\Z").next());
+        String input = new Scanner(file2).useDelimiter("\\Z").next();
 
-        WikiArtistMatcher wiki2 = new WikiArtistMatcher();
-
-        JSONObject artistsJson = wiki.parseCSVtoJsonViews(wiki.getClass().getClassLoader().getResource("artists-simplified.csv").getPath());
-
-        Map<String, BigInteger> map = new HashMap<>();
-
-        for (String artist : artistsJson.keySet()) {
-            String viewString = artistsJson.getString(artist);
-            try {
-                map.put(artist, new BigInteger(viewString));
-            } catch (Exception e) {
-                map.put(artist, new BigInteger("0"));
-            }
-        }
-
-        Set<Map.Entry<String, BigInteger>> set = map.entrySet();
-        List<Map.Entry<String, BigInteger>> list = new ArrayList<>(set);
-        Collections.sort(list, new Comparator<Map.Entry<String, BigInteger>>()
-        {
-            public int compare( Map.Entry<String, BigInteger> o1, Map.Entry<String, BigInteger> o2 )
-            {
-                return (o2.getValue()).compareTo( o1.getValue() );
-            }
-        });
-
-        JSONObject verifiedArtists = new JSONObject();
+        List<String> toRemove = new ArrayList<>(Arrays.asList(input.split(",")));
 
         for (int i = 0; i < artistArray.length(); i++) {
             JSONObject artist = artistArray.getJSONObject(i);
-            if (artist.getBoolean("verified") && !artist.getString("title").equals("")) verifiedArtists.put(artist.getString("vevo"), artist.getString("title"));
+            if (toRemove.contains(artist.getString("vevo"))) artist.put("verified", false);
         }
 
-        System.out.println(verifiedArtists.length());
+        PrintWriter writer = null;
 
-        for (int i = 0; i < 5000; i++) {
-            String artist = list.get(i).getKey();
-            if (!verifiedArtists.has(artist)) System.out.println(artist);
+        try {
+            writer = new PrintWriter("artists-ALL-FINAL.json", "UTF-8");
+        } catch (IOException e) {
+            System.out.println("Could not write result file");
+            System.exit(1);
         }
+
+        writer.print(artistArray);
+        writer.close();
+
+
+
+        /* ************** Find Unverified Artists with Most Views ************** */
+
+//        WikiArtistMatcher wiki2 = new WikiArtistMatcher();
+//
+//        JSONObject artistsJson = wiki.parseCSVtoJsonViews(wiki.getClass().getClassLoader().getResource("artists-simplified.csv").getPath());
+//
+//        Map<String, BigInteger> map = new HashMap<>();
+//
+//        for (String artist : artistsJson.keySet()) {
+//            String viewString = artistsJson.getString(artist);
+//            try {
+//                map.put(artist, new BigInteger(viewString));
+//            } catch (Exception e) {
+//                map.put(artist, new BigInteger("0"));
+//            }
+//        }
+//
+//        Set<Map.Entry<String, BigInteger>> set = map.entrySet();
+//        List<Map.Entry<String, BigInteger>> list = new ArrayList<>(set);
+//        Collections.sort(list, new Comparator<Map.Entry<String, BigInteger>>()
+//        {
+//            public int compare( Map.Entry<String, BigInteger> o1, Map.Entry<String, BigInteger> o2 )
+//            {
+//                return (o2.getValue()).compareTo( o1.getValue() );
+//            }
+//        });
+//
+//        JSONObject verifiedArtists = new JSONObject();
+//
+//        for (int i = 0; i < artistArray.length(); i++) {
+//            JSONObject artist = artistArray.getJSONObject(i);
+//            if (artist.getBoolean("verified") && !artist.getString("title").equals("")) verifiedArtists.put(artist.getString("vevo"), artist.getString("title"));
+//        }
+//
+//        System.out.println(verifiedArtists.length());
+//
+//        for (int i = 0; i < 5000; i++) {
+//            String artist = list.get(i).getKey();
+//            if (!verifiedArtists.has(artist)) System.out.println(artist);
+//        }
 
 //        int count = 0;
 //
