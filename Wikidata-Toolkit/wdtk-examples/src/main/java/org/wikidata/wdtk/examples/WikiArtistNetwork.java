@@ -105,27 +105,27 @@ public class WikiArtistNetwork {
         }
     }
 
-    public static void updateNodeScore(String source, String node, int weight, Map map) {
-        if (!labels.contains(source) && !categories.contains(source)) {
-            if (!map.containsKey(node)) map.put(node, weight);
-            else map.put(node, (int) map.get(node) + weight);
-        } else if (labels.contains(source)) {
-            if (weight == 1) return;
-            else {
-                if (!map.containsKey(node)) map.put(node, weight - 1);
-                else map.put(node, (int) map.get(node) + weight - 1);
-            }
-        } else if (source.toLowerCase().contains("from")) {
-            if (weight == 1) return;
-            else {
-                if (!map.containsKey(node)) map.put(node, weight - 1);
-                else map.put(node, (int) map.get(node) + weight - 1);
-            }
-        } else {
-            if (!map.containsKey(node)) map.put(node, weight);
-            else map.put(node, (int) map.get(node) + weight);
-        }
-    }
+//    public static void updateNodeScore(String source, String node, int weight, Map map) {
+//        if (!labels.contains(source) && !categories.contains(source)) {
+//            if (!map.containsKey(node)) map.put(node, weight);
+//            else map.put(node, (int) map.get(node) + weight);
+//        } else if (labels.contains(source)) {
+//            if (weight == 1) return;
+//            else {
+//                if (!map.containsKey(node)) map.put(node, weight - 1);
+//                else map.put(node, (int) map.get(node) + weight - 1);
+//            }
+//        } else if (source.toLowerCase().contains("from")) {
+//            if (weight == 1) return;
+//            else {
+//                if (!map.containsKey(node)) map.put(node, weight - 1);
+//                else map.put(node, (int) map.get(node) + weight - 1);
+//            }
+//        } else {
+//            if (!map.containsKey(node)) map.put(node, weight);
+//            else map.put(node, (int) map.get(node) + weight);
+//        }
+//    }
 
     public static void updateNodeFirstDegree(Map map) {
         if (!map.containsKey("source")) map.put("source", 1);
@@ -170,7 +170,7 @@ public class WikiArtistNetwork {
         }
     }
 
-    public static void newgetRecommendedArtists(String artist) {
+    public static void getRecommendedArtists(String artist) {
         Map<String, Map<String, Integer>> artistsMap = new HashMap<>();
 
         List<String> neighbors = Graphs.neighborListOf(graph, artist);
@@ -218,9 +218,9 @@ public class WikiArtistNetwork {
                 if (key2.equals("artist")) {
                     total += 20.0 * artistMap.get(key2);
                 } else if (key2.equals("genre")) {
-                    total += 5.0 * artistMap.get(key2);
-                } else if (key2.equals("category")) {
                     total += 8.0 * artistMap.get(key2);
+                } else if (key2.equals("category")) {
+                    total += 5.0 * artistMap.get(key2);
                 } else if (key2.equals("source")) {
                     total += 40.0 * artistMap.get(key2);
                 } else if (key2.equals("label")) {
@@ -253,48 +253,48 @@ public class WikiArtistNetwork {
         }
     }
 
-    public static List<Map.Entry<String, Integer>> getRecommendedArtists(String artist) {
-        Map<String, Integer> map = new HashMap<>();
-
-        List<String> neighbors = Graphs.neighborListOf(graph, artist);
-
-        for (String neighbor : neighbors) {
-            if (!neighbor.equals(artist)) {
-                updateNodeScore(artist, neighbor, 1, map);
-            }
-            List<String> secondNeighbors = Graphs.neighborListOf(graph, neighbor);
-            for (String secondNeighbor : secondNeighbors) {
-                if (!secondNeighbor.equals(artist)) {
-                    updateNodeScore(neighbor, secondNeighbor, 1, map);
-                }
-                List<String> thirdNeighbors = Graphs.neighborListOf(graph, secondNeighbor);
-                for (String thirdNeighbor : thirdNeighbors) {
-                    if (neighbors.contains(thirdNeighbor) && !secondNeighbor.equals(artist)) {
-                        updateNodeScore(neighbor, secondNeighbor, 1, map);
-                    } else if (thirdNeighbor.equals(artist) && !secondNeighbor.equals(artist)) {
-                        updateNodeScore(neighbor, secondNeighbor, 1, map);
-                    }
-                }
-            }
-        }
-
-        Set<Map.Entry<String, Integer>> set = map.entrySet();
-        List<Map.Entry<String, Integer>> list = new ArrayList<>(set);
-        Collections.sort(list, new Comparator<Map.Entry<String, Integer>>()
-        {
-            public int compare( Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2 )
-            {
-                return (o2.getValue()).compareTo( o1.getValue() );
-            }
-        });
-        List<Map.Entry<String, Integer>> results = new ArrayList<>();
-        for (Map.Entry<String, Integer> entry : list) {
-            if (verifiedArtists.contains(entry.getKey())) {
-                results.add(entry);
-            }
-        }
-        return results;
-    }
+//    public static List<Map.Entry<String, Integer>> getRecommendedArtists(String artist) {
+//        Map<String, Integer> map = new HashMap<>();
+//
+//        List<String> neighbors = Graphs.neighborListOf(graph, artist);
+//
+//        for (String neighbor : neighbors) {
+//            if (!neighbor.equals(artist)) {
+//                updateNodeScore(artist, neighbor, 1, map);
+//            }
+//            List<String> secondNeighbors = Graphs.neighborListOf(graph, neighbor);
+//            for (String secondNeighbor : secondNeighbors) {
+//                if (!secondNeighbor.equals(artist)) {
+//                    updateNodeScore(neighbor, secondNeighbor, 1, map);
+//                }
+//                List<String> thirdNeighbors = Graphs.neighborListOf(graph, secondNeighbor);
+//                for (String thirdNeighbor : thirdNeighbors) {
+//                    if (neighbors.contains(thirdNeighbor) && !secondNeighbor.equals(artist)) {
+//                        updateNodeScore(neighbor, secondNeighbor, 1, map);
+//                    } else if (thirdNeighbor.equals(artist) && !secondNeighbor.equals(artist)) {
+//                        updateNodeScore(neighbor, secondNeighbor, 1, map);
+//                    }
+//                }
+//            }
+//        }
+//
+//        Set<Map.Entry<String, Integer>> set = map.entrySet();
+//        List<Map.Entry<String, Integer>> list = new ArrayList<>(set);
+//        Collections.sort(list, new Comparator<Map.Entry<String, Integer>>()
+//        {
+//            public int compare( Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2 )
+//            {
+//                return (o2.getValue()).compareTo( o1.getValue() );
+//            }
+//        });
+//        List<Map.Entry<String, Integer>> results = new ArrayList<>();
+//        for (Map.Entry<String, Integer> entry : list) {
+//            if (verifiedArtists.contains(entry.getKey())) {
+//                results.add(entry);
+//            }
+//        }
+//        return results;
+//    }
 
     public static boolean validateVevoArtist(String vevoId) {
         try {
@@ -370,9 +370,9 @@ public class WikiArtistNetwork {
             e.printStackTrace();
         }
 
-        String artist = "";
+        String artist = "Foals (band)";
 
-        newgetRecommendedArtists(artist);
+        getRecommendedArtists(artist);
 
 //        List<Map.Entry<String, Integer>> results = getRecommendedArtists(artist);
 //

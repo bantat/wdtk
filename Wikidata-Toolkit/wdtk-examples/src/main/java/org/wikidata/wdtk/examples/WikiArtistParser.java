@@ -1,5 +1,6 @@
 package org.wikidata.wdtk.examples;
 
+import com.mysql.cj.jdbc.MysqlDataSource;
 import javafx.util.converter.BigIntegerStringConverter;
 import jdk.nashorn.api.scripting.ScriptObjectMirror;
 import org.apache.commons.csv.CSVFormat;
@@ -17,6 +18,10 @@ import org.wikidata.wdtk.wikibaseapi.apierrors.MediaWikiApiErrorException;
 import javax.script.*;
 import java.io.*;
 import java.math.BigInteger;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -29,6 +34,9 @@ public class WikiArtistParser {
     static WikibaseDataFetcher wbdf = WikibaseDataFetcher.getWikidataDataFetcher();
     static Invocable invocable;
     static ScriptEngine engine;
+
+    static Connection conn;
+    static MysqlDataSource dataSource;
 
     public JSONObject parseCSVtoJsonViews(String filePath) throws IOException {
         try (Reader in = new FileReader(filePath);) {
@@ -259,6 +267,34 @@ public class WikiArtistParser {
         return artistJson;
     }
 
+    public static boolean validateVevoArtist(String vevoId) {
+        try {
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT is_enabled, total_videos FROM artist_data WHERE artist_id = '" + vevoId + "'");
+
+            if (rs.next()) {
+                if ((rs.getInt("is_enabled") == 1) && (rs.getInt("total_videos") > 0)) {
+                    ResultSet rs2 = stmt.executeQuery("SELECT COUNT(*) FROM video_data WHERE artist_id = '" + vevoId + "' AND is_active AND NOT is_live;");
+                    if (rs2.next()) {
+                        if (rs2.getInt("COUNT(*)") > 0) {
+                            rs.close();
+                            rs2.close();
+                            stmt.close();
+                            return true;
+                        }
+                    }
+                }
+            }
+            rs.close();
+            stmt.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            System.out.println("EXCEPTION ON ARTIST: " + vevoId);
+        }
+
+        return false;
+    }
+
     public static void main(String[] args) throws MediaWikiApiErrorException, IOException, ScriptException, InterruptedException {
 
         /* SETUP */
@@ -276,27 +312,40 @@ public class WikiArtistParser {
         engine.eval(reader, scriptCtxt);
         invocable = (Invocable) engine;
 
+        dataSource = new MysqlDataSource();
+
+        dataSource.setUser("vevo_aurora");
+        dataSource.setPassword("foB-E6r-UsN-3y5");
+        dataSource.setServerName("analytics-staging.cluster-c87qoqg6lbh2.us-east-1.rds.amazonaws.com");
+        dataSource.setDatabaseName("vevoaurora");
+
+
+        try {
+            conn = dataSource.getConnection();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
         /* SETUP COMPLETE */
 
         File file = new File(wiki.getClass().getClassLoader().getResource("artists-ALL-FINAL.json").getPath());
 
         JSONArray artistArray = new JSONArray(new Scanner(file).useDelimiter("\\Z").next());
 
-        File file2 = new File(wiki.getClass().getClassLoader().getResource("duplicates-to-unverify.txt").getPath());
+        int total = artistArray.length();
 
-        String input = new Scanner(file2).useDelimiter("\\Z").next();
-
-        List<String> toRemove = new ArrayList<>(Arrays.asList(input.split(",")));
-
-        for (int i = 0; i < artistArray.length(); i++) {
+        for (int i = 0; i < total; i++) {
             JSONObject artist = artistArray.getJSONObject(i);
-            if (toRemove.contains(artist.getString("vevo"))) artist.put("verified", false);
+            System.out.println("Validating " + artist.getString("vevo"));
+            System.out.println(i + " of " + total);
+            if (validateVevoArtist(artist.getString("vevo"))) artist.put("valid", true);
+            else artist.put("valid", false);
         }
 
         PrintWriter writer = null;
 
         try {
-            writer = new PrintWriter("artists-ALL-FINAL.json", "UTF-8");
+            writer = new PrintWriter("artists-ALL-VALIDATED.json", "UTF-8");
         } catch (IOException e) {
             System.out.println("Could not write result file");
             System.exit(1);
