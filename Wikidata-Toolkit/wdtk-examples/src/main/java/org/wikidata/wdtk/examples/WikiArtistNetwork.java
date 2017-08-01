@@ -10,6 +10,8 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -34,11 +36,13 @@ public class WikiArtistNetwork {
     static ArrayList<String> labels = new ArrayList<>();
     static ArrayList<String> categories = new ArrayList<>();
     static ArrayList<String> verifiedArtists = new ArrayList<>();
+    static ArrayList<String> validArtists = new ArrayList<>();
 
     static Map<String, String> wikiToVevo = new HashMap<>();
     static Map<String, String> vevoToWiki = new HashMap<>();
 
     public static void buildComponentFromGenres(JSONArray genreArray, String artist) {
+        if (genreArray.length() > 7) System.out.println(artist + " has " + genreArray.length());
         for (int i = 0; i < genreArray.length(); i++) {
             String genre = genreArray.getString(i);
             if (!genres.contains(genre)) {
@@ -170,7 +174,7 @@ public class WikiArtistNetwork {
         }
     }
 
-    public static void getRecommendedArtists(String artist) {
+    public static List<Map.Entry<String, Float>> getRecommendedArtists(String artist, Integer max) {
         Map<String, Map<String, Integer>> artistsMap = new HashMap<>();
 
         List<String> neighbors = Graphs.neighborListOf(graph, artist);
@@ -246,11 +250,22 @@ public class WikiArtistNetwork {
                 return (o2.getValue()).compareTo( o1.getValue() );
             }
         });
+        Double maxEntry = null;
+        int count = 0;
+        List<Map.Entry<String, Float>> recommendations = new ArrayList<>();
         for (Map.Entry<String, Double> entry : list) {
-            if (verifiedArtists.contains(entry.getKey())) {
-                System.out.println(entry.getKey() + ": " + entry.getValue() + " - " + artistsMap.get(entry.getKey()));
+            if (verifiedArtists.contains(entry.getKey()) && validArtists.contains(entry.getKey())) {
+                if (count < 10) System.out.println(entry.getKey() + ": " + entry.getValue() + " - " + artistsMap.get(entry.getKey()));
+                if (maxEntry == null) {
+                    maxEntry = entry.getValue();
+                }
+                Double score = entry.getValue() / maxEntry;
+                recommendations.add(new AbstractMap.SimpleEntry<>(wikiToVevo.get(entry.getKey()), score.floatValue()));
+                count++;
             }
+            if (recommendations.size() == max) break;
         }
+        return recommendations;
     }
 
 //    public static List<Map.Entry<String, Integer>> getRecommendedArtists(String artist) {
@@ -324,11 +339,48 @@ public class WikiArtistNetwork {
         return false;
     }
 
+    public static void writeTableHeaders(PrintWriter writer, Integer max) {
+        StringBuilder header = new StringBuilder();
+        header.append("source");
+        header.append(',');
+        for (Integer i = 1; i < max; i++) {
+            header.append("A" + i.toString());
+            header.append(',');
+            header.append("S" + i.toString());
+            header.append(',');
+        }
+        header.append("A" + max.toString());
+        header.append(',');
+        header.append("S" + max.toString());
+        writer.println(header.toString());
+    }
+
+    public static void writeArtistRecommendations(PrintWriter writer, String sourceVevo, List<Map.Entry<String, Float>> recommendations, Integer max) {
+        StringBuilder row = new StringBuilder();
+        row.append(sourceVevo);
+        row.append(',');
+        for (Map.Entry<String, Float> entry : recommendations) {
+            row.append(entry.getKey());
+            row.append(',');
+            row.append(entry.getValue().toString());
+            row.append(',');
+        }
+        if (recommendations.size() < max) {
+            int diff = max - recommendations.size();
+            for (int i = 0; i < diff; i++) {
+                row.append(',');
+                row.append(',');
+            }
+        }
+        row.deleteCharAt(row.length() - 1);
+        writer.println(row.toString());
+    }
+
     public static void main(String[] args) throws FileNotFoundException {
         WikiArtistNetwork wiki = new WikiArtistNetwork();
 
         File file = new File(wiki.getClass().getClassLoader().getResource("wiki-data-ALL-FINAL.json").getPath());
-        File file2 = new File(wiki.getClass().getClassLoader().getResource("artists-ALL-FINAL.json").getPath());
+        File file2 = new File(wiki.getClass().getClassLoader().getResource("artists-ALL-VALIDATED.json").getPath());
 
         System.out.println("Loading JSON...");
 
@@ -354,25 +406,51 @@ public class WikiArtistNetwork {
                 vevoToWiki.put(artist.getString("vevo"), artist.getString("title"));
                 wikiToVevo.put(artist.getString("title"), artist.getString("vevo"));
             }
+            if (artist.getBoolean("valid") && !artist.getString("title").equals("")) {
+                validArtists.add(artist.getString("title"));
+            }
         }
 
-        dataSource = new MysqlDataSource();
+//        String artist = "God Is an Astronaut";
+//
+//        List<Map.Entry<String, Float>> recommendations1 = getRecommendedArtists(artist, 200);
+//
+//        String artist2 = "Anderson Paak";
+//
+//        List<Map.Entry<String, Float>> recommendations2 = getRecommendedArtists(artist2, 200);
 
-        dataSource.setUser("vevo_aurora");
-        dataSource.setPassword("foB-E6r-UsN-3y5");
-        dataSource.setServerName("analytics-staging.cluster-c87qoqg6lbh2.us-east-1.rds.amazonaws.com");
-        dataSource.setDatabaseName("vevoaurora");
+        Integer MAX_ARTISTS = 200;
+        Integer numVerified = verifiedArtists.size();
 
+        PrintWriter writer = null;
 
         try {
-            conn = dataSource.getConnection();
-        } catch (SQLException e) {
-            e.printStackTrace();
+            writer = new PrintWriter("artist-recommendation.csv", "UTF-8");
+        } catch (IOException e) {
+            System.out.println("Could not write result file");
+            System.exit(1);
         }
 
-        String artist = "Foals (band)";
+        writeTableHeaders(writer, MAX_ARTISTS);
 
-        getRecommendedArtists(artist);
+        for (int i = 0; i < artistJson.length(); i++) {
+            JSONObject artist = artistJson.getJSONObject(i);
+            try {
+                if (artist.getBoolean("verified") && artist.getBoolean("valid") && !artist.getString("title").equals("")) {
+                    String artistTitle = artist.getString("title");
+                    String artistVevo = artist.getString("vevo");
+                    System.out.println("*********** " + artistTitle + ": " + artistVevo + " ***********");
+                    System.out.println("########### " + i + " of " + numVerified + " ###########");
+                    List<Map.Entry<String, Float>> recommendations = getRecommendedArtists(artistTitle, MAX_ARTISTS);
+                    if (recommendations.size() > 0) writeArtistRecommendations(writer, artistVevo, recommendations, MAX_ARTISTS);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.out.println("EXCEPTION ON ARTIST: " + artist.toString());
+            }
+        }
+
+        writer.close();
 
 //        List<Map.Entry<String, Integer>> results = getRecommendedArtists(artist);
 //
