@@ -5,6 +5,18 @@ I cloned the whole wdtk library because it is easier to manage for project - edi
 
 Original work located in wdtk-examples directory
 
+- Purpose: Building an artist graph using the wiki project dataset
+
+- Components
+* Wiki Artist Matcher
+This class provides functionality for querying and verifying a given musical artist/group in the wiki dataset. Produces JSON with object properties which can be used to crossreference music service identifiers to WikiData QID identifiers.
+
+* Wiki Artist Parser
+This class provides functionality for parsing information from Wikipedia given an artist wiki entity. Functions use the EN wiki page for a given entity, and use the Wikipedia API to query specific information from articles and parse the information into string properties stored in JSON.
+
+* Wiki Artist Network
+Using information drawn from wikipedia, this class constructs a graph representation of artist, genre, category and music label relationships with JGraphT. With the graph constructed, this class produces an artist recommendation table based on a graph traversal algorithm starting with a given artist in the dataset.
+
 Wikidata Toolkit is a Java library for accessing Wikidata and other Wikibase installations. It can be used to create bots, to perform data extraction tasks (e.g., convert all data in Wikidata to a new format), and to do large-scale analyses that are too complex for using a simple SPARQL query service.
 
 Documentation
