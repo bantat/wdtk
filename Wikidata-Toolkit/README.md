@@ -3,6 +3,8 @@ Wikidata Toolkit Project Usage
 
 I cloned the whole wdtk library because it is easier to manage for project - editing some of the source files/configurations
 
+IMPORTANT: Some POM files and WDTK config files are edited for this project specifically, so thats why there is a massive codebase supporting the three core java classes which provide functionality for this project
+
 Original work located in wdtk-examples directory
 
 Purpose and Components
@@ -20,6 +22,14 @@ This class provides functionality for parsing information from Wikipedia given a
 * Wiki Artist Network
 
 Using information drawn from wikipedia, this class constructs a graph representation of artist, genre, category and music label relationships with JGraphT. With the graph constructed, this class produces an artist recommendation table based on a graph traversal algorithm starting with a given artist in the dataset.
+
+Output
+-------
+artists.json files are json files representing source artists and attributes, which are used to crossreference between music service and wiki dataset
+
+wiki-data.json files are json files representing the data gathered from wikipedia for a given artist/wiki entity's EN wikipedia page - note that all String identifiers in a given wikipedia realm (ENglish in this case) are unique and thus relationships between pages/categories etc are based on simple string matching.
+
+artist-recommendations.csv is a weighted recommendation table derived from the wiki artist graph - it has *n* rows for the number of artists which are verified matches between the music service and wiki data, and a configurable number of columns for sorted artists recommended based on the source artist, and the associated weight of that recommendation (a float ratio with the top artist(s) having a weight of 1.0, and all subsequent recommendations being some value 1.0 > *w* > 0.0
 
 NOTE:
 Wikidata Toolkit is a Java library for accessing Wikidata and other Wikibase installations. It can be used to create bots, to perform data extraction tasks (e.g., convert all data in Wikidata to a new format), and to do large-scale analyses that are too complex for using a simple SPARQL query service.
