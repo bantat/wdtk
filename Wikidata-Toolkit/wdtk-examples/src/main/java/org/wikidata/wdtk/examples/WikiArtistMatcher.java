@@ -17,13 +17,29 @@ import java.util.regex.Pattern;
 
 
 /**
- * Created by torebanta on 6/26/17.
+ * Created by Tore Banta on 6/26/17.
+ *
+ * This class provides functionality for querying and verifying a given musical artist/group in the wiki dataset.
+ * Produces JSON with object properties which can be used to crossreference music service identifiers to
+ * WikiData QID identifiers.
+ *
  */
 public class WikiArtistMatcher {
 
     static ApiConnection wbapi = ApiConnection.getWikidataApiConnection();
     static WikibaseDataFetcher wbdf = WikibaseDataFetcher.getWikidataDataFetcher();
 
+    /**
+     * Parses a csv table of artists and artist attributes to a list of JSONObjects which represent those artists
+     *
+     * @param filePath  an absolute file path giving the location of artist data .csv file - generated from aurora
+     *                  sql table
+     *
+     * @return          a list of json objects representing artists in the input table and their given properties
+     *                  (name, id, twitter handle, fb page, etc...)
+     *
+     * @throws IOException
+     */
     public ArrayList<JSONObject> parseCSVtoJson(String filePath) throws IOException {
         try (Reader in = new FileReader(filePath);) {
             Iterable<CSVRecord> records = CSVFormat.EXCEL.withHeader(
@@ -68,6 +84,19 @@ public class WikiArtistMatcher {
         }
     }
 
+    /**
+     * Returns a list of QID wikidata identifiers which were queried based on a given search keyword term
+     *
+     * @param searchKeyword search term, typically artist or group name, used to query wikidata to locate the given
+     *                      musician or music group's wikidata entity (QID)
+     *
+     * @param language      language of search term (ex: 'en', 'sp') to search for american vs latin american artists,
+     *                      etc.
+     *
+     * @return              list of wiki QID identifiers which could potentially match the search keyword provided
+     *
+     * @throws IOException
+     */
     public ArrayList<String> getWikiIdsFromArtistKeyword(String searchKeyword, String language) throws IOException {
         Map<String, String> params = new HashMap<>();
         params.put("action", "wbsearchentities");
@@ -92,6 +121,16 @@ public class WikiArtistMatcher {
         return wikiIds;
     }
 
+    /**
+     * Additional query function for getting QID identifiers based on a search keyword, using a different method
+     *
+     * @param searchKeyword additional query function using a different API endpoint which tends to have different
+     *                      results, or some results which might not have appeared in for the other query
+     *
+     * @return              list of wiki QID identifiers which could potentially match the search keyword provided
+     *
+     * @throws IOException
+     */
     public ArrayList<String> getMoreWikiIdsFromArtistKeyword(String searchKeyword) throws IOException {
         Map<String, String> params = new HashMap<>();
         params.put("action", "query");
@@ -116,6 +155,16 @@ public class WikiArtistMatcher {
         return wikiIds;
     }
 
+    /**
+     * Determines the 'best guess' matching of an artist JSONObject to a wikidata QID, based on string matching document
+     * and artist properties
+     *
+     * @param wikiIds       list of potential wiki QID identifiers to be matched to an artist
+     *
+     * @param artistJson    json representation of artist to be matched to a wiki entity
+     *
+     * @return              wiki QID which is the most confident match for the given artist
+     */
     public String findWikiIdFromList(ArrayList<String> wikiIds, JSONObject artistJson) {
         String artistWikiId = "";
         Map<String, EntityDocument> entities = Collections.emptyMap();
@@ -151,6 +200,16 @@ public class WikiArtistMatcher {
         return artistWikiId;
     }
 
+    /**
+     * Helper function for determining the number of properties of a wikidata document which suggest the entity is a
+     * musical artist of some sort, and properties which match attributes of the source artist json attributes
+     *
+     * @param artistDocument    wikidata document which is potentially corresponds to the artist being queried
+     *
+     * @param artistJson        json representation of artist to be matched to the wikidata document
+     *
+     * @return                  number of properties shared between artist and wikidata document
+     */
     public Integer propertyMatchCountFromDocument(ItemDocument artistDocument, JSONObject artistJson) {
         int matchCount = 0;
         for (StatementGroup sg : artistDocument.getStatementGroups()) {
@@ -244,6 +303,16 @@ public class WikiArtistMatcher {
         return matchCount;
     }
 
+    /**
+     * Primary function used to locate a wikidata entity which corresponds to a given artist
+     *
+     * @param artistJson    json representation of source artist which is being crossreferenced with wikidata
+     *
+     * @return              wikidata QID string (variable length string of digits prefixed with 'Q') corresponding to
+     *                      source artist
+     *
+     * @throws IOException
+     */
     public String findWikiIdFromArtistJson(JSONObject artistJson) throws IOException {
         ArrayList<String> ids = getWikiIdsFromArtistKeyword(artistJson.get("name").toString(), "en");
         System.out.println(ids);
@@ -321,6 +390,14 @@ public class WikiArtistMatcher {
         return wikiId;
     }
 
+    /**
+     * Where the magic happens: uncommented code is typically required for setup, then blocks of commented code
+     * execute scripts using resource input files, then write results to a top level output file
+     *
+     * @param args
+     * @throws MediaWikiApiErrorException
+     * @throws IOException
+     */
     public static void main(String[] args) throws MediaWikiApiErrorException, IOException {
         ExampleHelpers.configureLogging();
 
