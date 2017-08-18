@@ -22,7 +22,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Created by torebanta on 7/13/17.
+ * Created by Tore Banta on 7/13/17.
+ *
+ * Using information drawn from wikipedia, this class constructs a graph representation of artist, genre, category and
+ * music label relationships with JGraphT. With the graph constructed, this class produces an artist recommendation
+ * table based on a graph traversal algorithm starting with a given artist in the dataset.
+ *
  */
 public class WikiArtistNetwork {
 
@@ -41,6 +46,14 @@ public class WikiArtistNetwork {
     static Map<String, String> wikiToVevo = new HashMap<>();
     static Map<String, String> vevoToWiki = new HashMap<>();
 
+    /**
+     * Constructs JGraphT graph component from a list of genres, linking the artist which is a part of those genres to
+     * the newly added (and existing) genre nodes
+     *
+     * @param genreArray    list of genres
+     *
+     * @param artist        artist from which genre array originated
+     */
     public static void buildComponentFromGenres(JSONArray genreArray, String artist) {
         if (genreArray.length() > 7) System.out.println(artist + " has " + genreArray.length());
         for (int i = 0; i < genreArray.length(); i++) {
@@ -54,6 +67,14 @@ public class WikiArtistNetwork {
         }
     }
 
+    /**
+     * Constructs JGraphT graph component from a list of labels, linking the artist which is a part of those labels to
+     * the newly added (and existing) label nodes
+     *
+     * @param labelArray    list of record labels
+     *
+     * @param artist        artist from which label array originated
+     */
     public static void buildComponentFromLabels(JSONArray labelArray, String artist) {
         for (int i = 0; i < labelArray.length(); i++) {
             String label = labelArray.getString(i);
@@ -66,6 +87,14 @@ public class WikiArtistNetwork {
         }
     }
 
+    /**
+     * Constructs JGraphT graph component from a list of categories, linking the artist which is a part of those
+     * categories to the newly added (and existing) category nodes
+     *
+     * @param categoryArray list of categories
+     *
+     * @param artist        artist from which category array originated
+     */
     public static void buildComponentFromCategories(JSONArray categoryArray, String artist) {
         for (int i = 0; i < categoryArray.length(); i++) {
             String category = categoryArray.getString(i);
@@ -78,6 +107,14 @@ public class WikiArtistNetwork {
         }
     }
 
+    /**
+     * Constructs JGraphT graph component from a list of associated acts, linking the artist to their associated acts
+     * (directed), creating the associated act's artist node if it does not yet exist
+     *
+     * @param associatedArray   list of associated artists
+     *
+     * @param artist            artist from which associated acts originated
+     */
     public static void buildComponentFromAssociated(JSONArray associatedArray, String artist) {
         for (int i = 0; i < associatedArray.length(); i++) {
             String associatedArtist = associatedArray.getString(i);
@@ -90,6 +127,13 @@ public class WikiArtistNetwork {
         }
     }
 
+    /**
+     * Constructs the complete artist graph using the json wiki data - each element of the json dataset corresponds to
+     * a node in the graph, with artists linking to each other, their genres, categories, and music labels. Each node
+     * is identified by the unique string EN wikipedia title they correspond to
+     *
+     * @param wikiData  json containing wiki data dump collected by WikiArtistParser
+     */
     public static void buildGraph(JSONObject wikiData) {
         for (String name : wikiData.keySet()) {
             JSONObject artist = wikiData.getJSONObject(name);
@@ -131,11 +175,27 @@ public class WikiArtistNetwork {
 //        }
 //    }
 
+    /**
+     * Updates node scoring map for a node one degree of separation (level) away from source artist node
+     *
+     * @param map   map tracking number of times a given node is encountered during traversal, and the source node from
+     *              which a given node is traversed to
+     */
     public static void updateNodeFirstDegree(Map map) {
         if (!map.containsKey("source")) map.put("source", 1);
         else map.put("source", (int) map.get("source") + 1);
     }
 
+    /**
+     * Updates node scoring map for a node two degrees of separation (levels) away from source artist node
+     *
+     * @param source    source artist node of graph traversal
+     *
+     * @param node      node which was encountered during traversal, in order to check if node is source
+     *
+     * @param map       map tracking number of times a given node is encountered during traversal, and the source node from
+     *                  which a given node is traversed to
+     */
     public static void updateNodeSecondDegree(String source, String node, Map map) {
         if (genres.contains(source)) {
             if (!map.containsKey("genre")) map.put("genre", 1);
@@ -155,6 +215,16 @@ public class WikiArtistNetwork {
         }
     }
 
+    /**
+     * Updates node scoring map for a node three degrees of separation (levels) away from source artist node
+     *
+     * @param source    source artist node of graph traversal
+     *
+     * @param node      node which was encountered during traversal, in order to check if node is source
+     *
+     * @param map       map tracking number of times a given node is encountered during traversal, and the source node
+     *                  from which a given node is traversed to
+     */
     public static void updateNodeThirdDegree(String source, String node, Map map) {
         if (genres.contains(source)) {
             if (!map.containsKey("genre-ext")) map.put("genre-ext", 1);
@@ -174,6 +244,18 @@ public class WikiArtistNetwork {
         }
     }
 
+    /**
+     * Primary function used to calculate sorted recommendations for a given source artist, with each artist's
+     * recommendation metric corresponding to a weighted sum of the number of times the artist was encountered during
+     * the traversal from source artist
+     *
+     * @param artist    source artist node for which recommendations will be generated
+     *
+     * @param max       maximum number of recommended artists to return
+     *
+     * @return          sorted list of recommended artists and their 'score' being a ratio of the max value in the
+     *                  results (i.e. the top recommendation will always be 1.0, all subsequent results <1.0 and >0.0
+     */
     public static List<Map.Entry<String, Float>> getRecommendedArtists(String artist, Integer max) {
         Map<String, Map<String, Integer>> artistsMap = new HashMap<>();
 
@@ -311,6 +393,7 @@ public class WikiArtistNetwork {
 //        return results;
 //    }
 
+    // idk why this function is in this file too...
     public static boolean validateVevoArtist(String vevoId) {
         try {
             Statement stmt = conn.createStatement();
@@ -339,6 +422,13 @@ public class WikiArtistNetwork {
         return false;
     }
 
+    /**
+     * Writes headers of csv table of recommendation results using print writer
+     *
+     * @param writer    writer for the table
+     *
+     * @param max       maximum number of artist/score pairs per row (max number of recomendations)
+     */
     public static void writeTableHeaders(PrintWriter writer, Integer max) {
         StringBuilder header = new StringBuilder();
         header.append("source");
@@ -355,6 +445,17 @@ public class WikiArtistNetwork {
         writer.println(header.toString());
     }
 
+    /**
+     * Writes artist recommendations to row of csv table
+     *
+     * @param writer            writer for the table
+     *
+     * @param sourceVevo        source artist's vevo id
+     *
+     * @param recommendations   list of artist recommendations
+     *
+     * @param max               maximum number of artist recommendations per row
+     */
     public static void writeArtistRecommendations(PrintWriter writer, String sourceVevo, List<Map.Entry<String, Float>> recommendations, Integer max) {
         StringBuilder row = new StringBuilder();
         row.append(sourceVevo);
@@ -376,6 +477,13 @@ public class WikiArtistNetwork {
         writer.println(row.toString());
     }
 
+    /**
+     * Where the magic happens: uncommented code is typically required for setup, then blocks of commented code
+     * execute scripts using resource input files, then write results to a top level output file
+     *
+     * @param args
+     * @throws FileNotFoundException
+     */
     public static void main(String[] args) throws FileNotFoundException {
         WikiArtistNetwork wiki = new WikiArtistNetwork();
 
@@ -436,7 +544,7 @@ public class WikiArtistNetwork {
         for (int i = 0; i < artistJson.length(); i++) {
             JSONObject artist = artistJson.getJSONObject(i);
             try {
-                if (artist.getBoolean("verified") && artist.getBoolean("valid") && !artist.getString("title").equals("")) {
+                if (artist.getBoolean("verified") && !artist.getString("title").equals("")) {
                     String artistTitle = artist.getString("title");
                     String artistVevo = artist.getString("vevo");
                     System.out.println("*********** " + artistTitle + ": " + artistVevo + " ***********");
@@ -451,6 +559,8 @@ public class WikiArtistNetwork {
         }
 
         writer.close();
+
+        /* ************** Everything below was just testing code, i think ************** */
 
 //        List<Map.Entry<String, Integer>> results = getRecommendedArtists(artist);
 //

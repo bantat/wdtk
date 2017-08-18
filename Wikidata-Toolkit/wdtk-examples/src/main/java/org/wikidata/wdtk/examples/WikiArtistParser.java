@@ -26,7 +26,12 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 /**
- * Created by torebanta on 7/5/17.
+ * Created by Tore Banta on 7/5/17.
+ *
+ * This class provides functionality for parsing information from Wikipedia given an artist wiki entity.
+ * Functions use the EN wiki page for a given entity, and use the Wikipedia API to query specific information from
+ * articles and parse the information into string properties stored in JSON.
+ *
  */
 public class WikiArtistParser {
 
@@ -38,6 +43,16 @@ public class WikiArtistParser {
     static Connection conn;
     static MysqlDataSource dataSource;
 
+    /**
+     * Extra helper function to add view counts to artist json in order to find unmatched popular artists
+     *
+     * @param filePath  an absolute file path giving the location of artist data .csv file - generated from aurora
+     *                  sql table
+     *
+     * @return          a list of json objects representing artists in the input table and their given view counts
+     *
+     * @throws IOException
+     */
     public JSONObject parseCSVtoJsonViews(String filePath) throws IOException {
         try (Reader in = new FileReader(filePath);) {
             Iterable<CSVRecord> records = CSVFormat.EXCEL.withHeader(
@@ -81,6 +96,16 @@ public class WikiArtistParser {
         }
     }
 
+    /**
+     * Updates an artist JSONObject to contain EN wikipedia article title and labels (shorthand, exact names) for the
+     * wiki entity
+     *
+     * @param artistDocument    wikidata document corresponding to the artist's QID
+     *
+     * @param artistJson        json representing artist properties, being updated with 'title' and 'label' attributes
+     *
+     * @return                  updated artist json containing new attributes
+     */
     public JSONObject getWikiPropertiesFromDocument(ItemDocument artistDocument, JSONObject artistJson) {
         artistJson.put("title", "");
         artistJson.put("label", "");
@@ -114,6 +139,16 @@ public class WikiArtistParser {
         return artistJson;
     }
 
+    /**
+     * Returns a list of category name/identifiers for a given wikipedia article title (categories which contain that
+     * wikipedia entry)
+     *
+     * @param wikiTitle title of the wikipedia article categories are being drawn from
+     *
+     * @return          list of categories (unique strings with category names prefixed by 'Category:')
+     *
+     * @throws IOException
+     */
     public ArrayList<String> getCategoriesFromTitle(String wikiTitle) throws IOException {
         Map<String, String> params = new HashMap<>();
         params.put("action", "query");
@@ -141,6 +176,16 @@ public class WikiArtistParser {
         return categories;
     }
 
+    /**
+     * Returns 'infobox' text from a wikipedia article. The infobox is located on the top right of most articles and
+     * contains the most pertinent links and information for a given entity. The text is returned in wikitext syntax.
+     *
+     * @param wikiTitle title of the wikipedia article infobox text is being drawn from
+     *
+     * @return          returns a string containg wikitext formatted infobox content from the source article
+     *
+     * @throws IOException
+     */
     public String getInfoboxFromTitle(String wikiTitle) throws IOException {
         Map<String, String> params = new HashMap<>();
         params.put("action", "query");
@@ -162,6 +207,14 @@ public class WikiArtistParser {
         return text.replace("\n", "");
     }
 
+    /**
+     * Returns a json object representing the information contained in an infobox wikitext string. Uses a javascript
+     * shell to run parsing function from 'wtf_wikipedia' to generate json from wikitext.
+     *
+     * @param wikitext  wikitext formatted string representing the infobox of a wikipedia article
+     *
+     * @return          json containing key value properties described by infobox text
+     */
     public JSONObject getInfoboxJsonFromWikitext(String wikitext) {
         Object result;
         JSONObject json = new JSONObject();
@@ -183,6 +236,16 @@ public class WikiArtistParser {
         return json;
     }
 
+    /**
+     * Primary function used to construct json which describes a wikipedia article info relevant to musical qualities -
+     * (associated acts, label, genres, categories) - which corresponds to an artist
+     *
+     * @param infoboxJson   json describing information contained in infobox component of wikipedia article
+     *
+     * @param categories    list of category names which the wiki article belongs to
+     *
+     * @return              json containing all available information parsed from wikipedia article
+     */
     public JSONObject buildArtistWikiInfoJson(JSONObject infoboxJson, ArrayList<String> categories) {
 
         ArrayList<String> associated_acts = new ArrayList<>();
@@ -267,6 +330,13 @@ public class WikiArtistParser {
         return artistJson;
     }
 
+    /**
+     * 'Validates' an artist by checking that they actually have accessible videos on their profile
+     *
+     * @param vevoId    vevo identifier
+     *
+     * @return          true if artist has videos, false if they do not
+     */
     public static boolean validateVevoArtist(String vevoId) {
         try {
             Statement stmt = conn.createStatement();
@@ -295,6 +365,16 @@ public class WikiArtistParser {
         return false;
     }
 
+    /**
+     * Where the magic happens: uncommented code is typically required for setup, then blocks of commented code
+     * execute scripts using resource input files, then write results to a top level output file
+     *
+     * @param args
+     * @throws MediaWikiApiErrorException
+     * @throws IOException
+     * @throws ScriptException
+     * @throws InterruptedException
+     */
     public static void main(String[] args) throws MediaWikiApiErrorException, IOException, ScriptException, InterruptedException {
 
         /* SETUP */
@@ -328,31 +408,33 @@ public class WikiArtistParser {
 
         /* SETUP COMPLETE */
 
-        File file = new File(wiki.getClass().getClassLoader().getResource("artists-ALL-FINAL.json").getPath());
+        /* ************** Validate artists that have accessible videos ************** */
 
-        JSONArray artistArray = new JSONArray(new Scanner(file).useDelimiter("\\Z").next());
-
-        int total = artistArray.length();
-
-        for (int i = 0; i < total; i++) {
-            JSONObject artist = artistArray.getJSONObject(i);
-            System.out.println("Validating " + artist.getString("vevo"));
-            System.out.println(i + " of " + total);
-            if (validateVevoArtist(artist.getString("vevo"))) artist.put("valid", true);
-            else artist.put("valid", false);
-        }
-
-        PrintWriter writer = null;
-
-        try {
-            writer = new PrintWriter("artists-ALL-VALIDATED.json", "UTF-8");
-        } catch (IOException e) {
-            System.out.println("Could not write result file");
-            System.exit(1);
-        }
-
-        writer.print(artistArray);
-        writer.close();
+//        File file = new File(wiki.getClass().getClassLoader().getResource("artists-ALL-FINAL.json").getPath());
+//
+//        JSONArray artistArray = new JSONArray(new Scanner(file).useDelimiter("\\Z").next());
+//
+//        int total = artistArray.length();
+//
+//        for (int i = 0; i < total; i++) {
+//            JSONObject artist = artistArray.getJSONObject(i);
+//            System.out.println("Validating " + artist.getString("vevo"));
+//            System.out.println(i + " of " + total);
+//            if (validateVevoArtist(artist.getString("vevo"))) artist.put("valid", true);
+//            else artist.put("valid", false);
+//        }
+//
+//        PrintWriter writer = null;
+//
+//        try {
+//            writer = new PrintWriter("artists-ALL-VALIDATED.json", "UTF-8");
+//        } catch (IOException e) {
+//            System.out.println("Could not write result file");
+//            System.exit(1);
+//        }
+//
+//        writer.print(artistArray);
+//        writer.close();
 
 
 
