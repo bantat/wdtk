@@ -35,11 +35,15 @@ import java.util.regex.Pattern;
  */
 public class WikiArtistParser {
 
+    // Wikipedia API for scraping article info
     static ApiConnection wbapi = new ApiConnection("https://en.wikipedia.org/w/api.php");
     static WikibaseDataFetcher wbdf = WikibaseDataFetcher.getWikidataDataFetcher();
+    
+    // Script engine/invocables for running javascript module 'wtf_wikipedia'
     static Invocable invocable;
     static ScriptEngine engine;
 
+    // Aurora connection for querying additional data
     static Connection conn;
     static MysqlDataSource dataSource;
 
@@ -68,6 +72,7 @@ public class WikiArtistParser {
                 if (header) header = false;
 
                 else {
+                    // Add viewcount property to artist json for finding high profile unmatched artists
                     if (record.get("total_views").length() < 4 && !record.get("total_views").equals("")
                             && !record.get("total_videos").equals("")) {
                         try {
@@ -109,6 +114,8 @@ public class WikiArtistParser {
     public JSONObject getWikiPropertiesFromDocument(ItemDocument artistDocument, JSONObject artistJson) {
         artistJson.put("title", "");
         artistJson.put("label", "");
+        
+        // Get EN title and label properties stored in ItemDocument
         try {
             Map<String, SiteLink> links = artistDocument.getSiteLinks();
             SiteLink link = links.get("enwiki");
@@ -124,7 +131,8 @@ public class WikiArtistParser {
             System.out.println("No enwiki label");
             artistJson.put("label", "");
         }
-
+        
+        // Didn't bother querying alias values for further crossreferencing datapoints
 //        ArrayList<String> aliasArray = new ArrayList<>();
 //
 //        Map<String, List<MonolingualTextValue>> aliases = artistDocument.getAliases();
@@ -150,6 +158,7 @@ public class WikiArtistParser {
      * @throws IOException
      */
     public ArrayList<String> getCategoriesFromTitle(String wikiTitle) throws IOException {
+        // Wikipedia article categories API query parameters
         Map<String, String> params = new HashMap<>();
         params.put("action", "query");
         params.put("format", "json");
@@ -158,6 +167,7 @@ public class WikiArtistParser {
         params.put("cllimit", "25");
         params.put("titles", wikiTitle);
 
+        // Use wikibase api to get article categories stored as JSON
         InputStream response = this.wbapi.sendRequest("GET", params);
         StringWriter writer = new StringWriter();
         IOUtils.copy(response, writer);     // "UTF-8" encoding arg?
@@ -166,6 +176,7 @@ public class WikiArtistParser {
         JSONObject item = results.getJSONObject(results.keys().next().toString());
         JSONArray categoriesJson = item.getJSONArray("categories");
 
+        // Parse out string titles from JSON
         ArrayList<String> categories = new ArrayList<>();
 
         for (int i = 0; i < categoriesJson.length(); i++) {
@@ -187,6 +198,7 @@ public class WikiArtistParser {
      * @throws IOException
      */
     public String getInfoboxFromTitle(String wikiTitle) throws IOException {
+        // Wikipedia article infobox string (wikitext) API query parameters
         Map<String, String> params = new HashMap<>();
         params.put("action", "query");
         params.put("format", "json");
@@ -195,6 +207,7 @@ public class WikiArtistParser {
         params.put("rvsection", "0");
         params.put("titles", wikiTitle);
 
+        // Use wikibase API to exectue query, parse text from JSON
         InputStream response = this.wbapi.sendRequest("GET", params);
         StringWriter writer = new StringWriter();
         IOUtils.copy(response, writer);     // "UTF-8" encoding arg?
@@ -204,6 +217,7 @@ public class WikiArtistParser {
         JSONArray revisionsJson = item.getJSONArray("revisions");
         JSONObject revision = revisionsJson.getJSONObject(0);
         String text = revision.getString("*");
+        // Remove newline characters because they screw up infobox parser results
         return text.replace("\n", "");
     }
 
@@ -216,6 +230,7 @@ public class WikiArtistParser {
      * @return          json containing key value properties described by infobox text
      */
     public JSONObject getInfoboxJsonFromWikitext(String wikitext) {
+        // Generic Object type to store results of javascript parser call
         Object result;
         JSONObject json = new JSONObject();
 
@@ -223,6 +238,7 @@ public class WikiArtistParser {
             result = invocable.invokeMethod(engine.getBindings(ScriptContext.ENGINE_SCOPE).get("wtf_wikipedia"), "parse", wikitext);
             ScriptObjectMirror mirror = (ScriptObjectMirror) result;
 
+            // Check for infobox in parser results, return JSON
             if (mirror.containsKey("infobox")) {
                 ScriptObjectMirror infobox = (ScriptObjectMirror) mirror.getMember("infobox");
                 json = new JSONObject(infobox);
@@ -248,11 +264,15 @@ public class WikiArtistParser {
      */
     public JSONObject buildArtistWikiInfoJson(JSONObject infoboxJson, ArrayList<String> categories) {
 
-        ArrayList<String> associated_acts = new ArrayList<>();
-        ArrayList<String> labels = new ArrayList<>();
-        ArrayList<String> genres = new ArrayList<>();
-        ArrayList<String> module = new ArrayList<>();
+        // Core attributes generated from wikipedia content:
+        ArrayList<String> associated_acts = new ArrayList<>();  // List of artist title strings which are listed as associated acts
+        ArrayList<String> labels = new ArrayList<>();           // Recording lables listed for artist
+        ArrayList<String> genres = new ArrayList<>();           // Musical genres listed for artists
+        ArrayList<String> module = new ArrayList<>();           // 'Module' contains un-categorized infobox content because of parser failure
 
+        // Parsing info from wiki article infobox JSON object
+        // All properties parsed to arrays of String titles
+        
         if (infoboxJson.has("associated_acts")) {
             try {
                 JSONObject links = infoboxJson.getJSONObject("associated_acts").getJSONObject("links");
@@ -308,6 +328,8 @@ public class WikiArtistParser {
                 //System.out.println(infoboxJson);
             }
         }
+        
+        // Return parsed info in clean, minimal JSON object artist wiki data
 
         JSONObject artistJson = new JSONObject();
 
@@ -338,6 +360,7 @@ public class WikiArtistParser {
      * @return          true if artist has videos, false if they do not
      */
     public static boolean validateVevoArtist(String vevoId) {
+        // Use aurora artist DB to determine if artist is active, and has videos which are accessible
         try {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT is_enabled, total_videos FROM artist_data WHERE artist_id = '" + vevoId + "'");
@@ -386,6 +409,7 @@ public class WikiArtistParser {
         Set<PropertyIdValue> properties = new HashSet<>();
         wbdf.getFilter().setPropertyFilter(properties);
 
+        // Prep javascript shell for using 'wtf_wikipedia' parser
         FileReader reader = new FileReader(wiki.getClass().getClassLoader().getResource("wtf_wikipedia-master").getPath() + "/builds/wtf_wikipedia.js");
         engine = new ScriptEngineManager().getEngineByName("nashorn");
         ScriptContext scriptCtxt = engine.getContext();
@@ -395,11 +419,11 @@ public class WikiArtistParser {
         dataSource = new MysqlDataSource();
 
         dataSource.setUser("vevo_aurora");
-        dataSource.setPassword("foB-E6r-UsN-3y5");
-        dataSource.setServerName("analytics-staging.cluster-c87qoqg6lbh2.us-east-1.rds.amazonaws.com");
+        dataSource.setPassword("");                 // Server name/PW left out of public repo, insert to validate artists
+        dataSource.setServerName("");
         dataSource.setDatabaseName("vevoaurora");
 
-
+        // This won't work without server name and password...
         try {
             conn = dataSource.getConnection();
         } catch (SQLException e) {
@@ -521,6 +545,7 @@ public class WikiArtistParser {
 //        writer.close();
 
         /* ************** Filter Categories ************** */
+        // Filter out categories which contain irrelevant info/noise
 
 //        File file = new File(wiki.getClass().getClassLoader().getResource("wiki-data-module-fixed.json").getPath());
 //
@@ -564,10 +589,11 @@ public class WikiArtistParser {
 ////        System.out.println(sharedCategories.size() + " shared categories");
 //
 //        ArrayList<String> toFilter = new ArrayList<>();
-//        toFilter.add("Category:Living people");
+//        toFilter.add("Category:Living people");           // Massive, irrelevant category
 //        toFilter.add("Category:Commandeurs of the Ordre des Arts et des Lettres");
 //        toFilter.add("Officers Crosses of the Order of Merit of the Federal Republic of Germany");
 //
+//        // These categories were somewhat arbitrarily filtered out, can be replaced with low weighting/special treatment
 //        for (String category : categories) {
 //            String simplified = category.toLowerCase();
 //            if (simplified.contains("births")) toFilter.add(category);
@@ -576,7 +602,7 @@ public class WikiArtistParser {
 //            if (simplified.contains("winner")) toFilter.add(category);
 //            if (simplified.contains("actor")) toFilter.add(category);
 //            if (simplified.contains("actress")) toFilter.add(category);
-////            if (simplified.contains("christian")) toFilter.add(category);
+////            if (simplified.contains("christian")) toFilter.add(category);   // There were a bunch of semetic categories, realized is useful for christian music
 ////            if (simplified.contains("jew")) toFilter.add(category);
 //            if (simplified.contains("business")) toFilter.add(category);
 //            if (simplified.contains("model")) toFilter.add(category);
@@ -620,6 +646,9 @@ public class WikiArtistParser {
 //        writer.close();
 
         /* ************** Parse module entities ************** */
+        // When wiki article has multiple sections to infobox (i.e. Donald Glover has a music and film career)
+        // wikitext parser lists all links as 'module'. This code block finds what attribute a link in the module
+        // belongs to, and updates artist json appropriately
 
 //        for (String key : wikiJson.keySet()) {
 //            JSONObject artist = wikiJson.getJSONObject(key);
@@ -656,6 +685,7 @@ public class WikiArtistParser {
 
 
         /* ************** Generate wiki data ************** */
+        // Parse categories, infobox content from wiki article titles
 //
 //        File file = new File(wiki.getClass().getClassLoader().getResource("artists-updated.json").getPath());
 //
@@ -726,6 +756,7 @@ public class WikiArtistParser {
 //        System.out.println(results.length() + " results of " + numArtists);
 
         /* ************** Add Wiki title/label to Json ************** */
+        // Use QID to get wiki title and label for data collection and artist match verification
 
 //        JSONObject results = new JSONObject();
 //        for (String artist : new ArrayList<String>()) {
