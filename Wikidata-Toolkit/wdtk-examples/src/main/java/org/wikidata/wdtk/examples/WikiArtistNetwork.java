@@ -36,6 +36,7 @@ public class WikiArtistNetwork {
     static Connection conn;
     static MysqlDataSource dataSource;
 
+    // Arrays for determining the type of a node given the string representation
     static ArrayList<String> artists = new ArrayList<>();
     static ArrayList<String> genres = new ArrayList<>();
     static ArrayList<String> labels = new ArrayList<>();
@@ -43,6 +44,7 @@ public class WikiArtistNetwork {
     static ArrayList<String> verifiedArtists = new ArrayList<>();
     static ArrayList<String> validArtists = new ArrayList<>();
 
+    // Conversion maps for wiki QID <-> Vevo artist ID
     static Map<String, String> wikiToVevo = new HashMap<>();
     static Map<String, String> vevoToWiki = new HashMap<>();
 
@@ -55,13 +57,16 @@ public class WikiArtistNetwork {
      * @param artist        artist from which genre array originated
      */
     public static void buildComponentFromGenres(JSONArray genreArray, String artist) {
+        // Noticed that artists with > 7 categories skew results
         if (genreArray.length() > 7) System.out.println(artist + " has " + genreArray.length());
+        // Add genres as nodes, link to existing graph component
         for (int i = 0; i < genreArray.length(); i++) {
             String genre = genreArray.getString(i);
             if (!genres.contains(genre)) {
                 genres.add(genre);
                 if (!graph.containsVertex(genre)) graph.addVertex(genre);
             }
+            // Genres connections are undirected
             graph.addEdge(artist, genre);
             graph.addEdge(genre, artist);
         }
@@ -76,12 +81,14 @@ public class WikiArtistNetwork {
      * @param artist        artist from which label array originated
      */
     public static void buildComponentFromLabels(JSONArray labelArray, String artist) {
+        // Add labels as nodes, link to existing graph component
         for (int i = 0; i < labelArray.length(); i++) {
             String label = labelArray.getString(i);
             if (!labels.contains(label)) {
                 labels.add(label);
                 if (!graph.containsVertex(label)) graph.addVertex(label);
             }
+            // Record label connections are undirected
             graph.addEdge(artist, label);
             graph.addEdge(label, artist);
         }
@@ -96,12 +103,14 @@ public class WikiArtistNetwork {
      * @param artist        artist from which category array originated
      */
     public static void buildComponentFromCategories(JSONArray categoryArray, String artist) {
+        // Add categories as nodes, link to existing graph component
         for (int i = 0; i < categoryArray.length(); i++) {
             String category = categoryArray.getString(i);
             if (!categories.contains(category)) {
                 categories.add(category);
                 if (!graph.containsVertex(category)) graph.addVertex(category);
             }
+            // Category connections are undirected
             graph.addEdge(artist, category);
             graph.addEdge(category, artist);
         }
@@ -117,11 +126,13 @@ public class WikiArtistNetwork {
      */
     public static void buildComponentFromAssociated(JSONArray associatedArray, String artist) {
         for (int i = 0; i < associatedArray.length(); i++) {
+            // Add asscoiated artists as nodes, link to existing graph component
             String associatedArtist = associatedArray.getString(i);
             if (!artists.contains(associatedArtist)) {
                 artists.add(associatedArtist);
                 if (!graph.containsVertex(associatedArtist)) graph.addVertex(associatedArtist);
             }
+            // Associated act connections are directed! smaller artist may link to bigger artist
             //if (!graph.containsEdge(artist, associatedArtist)) graph.addEdge(artist, associatedArtist);
             graph.addEdge(artist, associatedArtist);
         }
@@ -135,6 +146,7 @@ public class WikiArtistNetwork {
      * @param wikiData  json containing wiki data dump collected by WikiArtistParser
      */
     public static void buildGraph(JSONObject wikiData) {
+        // Iterate through wikidata JSON objects, generating/updating subgraphs for each article node
         for (String name : wikiData.keySet()) {
             JSONObject artist = wikiData.getJSONObject(name);
 
@@ -197,6 +209,7 @@ public class WikiArtistNetwork {
      *                  which a given node is traversed to
      */
     public static void updateNodeSecondDegree(String source, String node, Map map) {
+        // Check what 'type' of source node was traversed from, updates map to indicate traversal
         if (genres.contains(source)) {
             if (!map.containsKey("genre")) map.put("genre", 1);
             else map.put("genre", (int) map.get("genre") + 1);
@@ -226,6 +239,7 @@ public class WikiArtistNetwork {
      *                  from which a given node is traversed to
      */
     public static void updateNodeThirdDegree(String source, String node, Map map) {
+        // -ext traversal type indicates traversal occured at 2nd/3rd level of graph centered at source artist
         if (genres.contains(source)) {
             if (!map.containsKey("genre-ext")) map.put("genre-ext", 1);
             else map.put("genre-ext", (int) map.get("genre-ext") + 1);
@@ -257,36 +271,45 @@ public class WikiArtistNetwork {
      *                  results (i.e. the top recommendation will always be 1.0, all subsequent results <1.0 and >0.0
      */
     public static List<Map.Entry<String, Float>> getRecommendedArtists(String artist, Integer max) {
+        // Map of artists, and their associated maps for traversal encounters
         Map<String, Map<String, Integer>> artistsMap = new HashMap<>();
 
         List<String> neighbors = Graphs.neighborListOf(graph, artist);
 
+        // Iterate through source artist's neighbors (1st level)
         for (String neighbor : neighbors) {
             if (!artistsMap.containsKey(neighbor)) {
+                // Add map for node encountered
                 Map<String, Integer> artistMap = new HashMap<>();
                 updateNodeFirstDegree(artistMap);
                 artistsMap.put(neighbor, artistMap);
-            } else updateNodeFirstDegree(artistsMap.get(neighbor));
+            } else updateNodeFirstDegree(artistsMap.get(neighbor)); // Update map for node encountered
+            
+            // Iterate through second degree neighbors (2nd level)
             List<String> secondNeighbors = Graphs.neighborListOf(graph, neighbor);
             for (String secondNeighbor : secondNeighbors) {
                 if (!secondNeighbor.equals(artist)) {
                     if (!artistsMap.containsKey(secondNeighbor)) {
+                        // Add map for node encountered
                         Map<String, Integer> artistMap = new HashMap<>();
                         updateNodeSecondDegree(neighbor, secondNeighbor, artistMap);
                         artistsMap.put(secondNeighbor, artistMap);
-                    } else updateNodeSecondDegree(neighbor, secondNeighbor, artistsMap.get(secondNeighbor));
+                    } else updateNodeSecondDegree(neighbor, secondNeighbor, artistsMap.get(secondNeighbor));    // Update map for node encountered
                 } else {
                     updateNodeSecondDegree(neighbor, "SOURCE_ARTIST", artistsMap.get(neighbor));
                 }
+                
+                // Iterate through third degree neighbors (3rd level)
                 List<String> thirdNeighbors = Graphs.neighborListOf(graph, secondNeighbor);
                 for (String thirdNeighbor : thirdNeighbors) {
                     if (!secondNeighbor.equals(artist)) {
                         if (neighbors.contains(thirdNeighbor)) {
                             if (!artistsMap.containsKey(thirdNeighbor)) {
+                                // Add map for node encountered
                                 Map<String, Integer> artistMap = new HashMap<>();
                                 updateNodeThirdDegree(secondNeighbor, thirdNeighbor, artistMap);
                                 artistsMap.put(thirdNeighbor, artistMap);
-                            } else updateNodeThirdDegree(neighbor, secondNeighbor, artistsMap.get(secondNeighbor));
+                            } else updateNodeThirdDegree(neighbor, secondNeighbor, artistsMap.get(secondNeighbor)); // Update map for node encountered
                         } else if (thirdNeighbor.equals(artist)) {
                             updateNodeThirdDegree(secondNeighbor, "SOURCE_ARTIST", artistsMap.get(secondNeighbor));
                         }
@@ -295,11 +318,13 @@ public class WikiArtistNetwork {
             }
         }
 
+        // Map for storing weighted sum of node encounters in traversal
         Map<String, Double> map = new HashMap<>();
 
         for (String key : artistsMap.keySet()) {
             Map<String, Integer> artistMap = artistsMap.get(key);
             Double total = 0.0;
+            // Traversal weights
             for (String key2 : artistMap.keySet()) {
                 if (key2.equals("artist")) {
                     total += 20.0 * artistMap.get(key2);
@@ -319,9 +344,12 @@ public class WikiArtistNetwork {
                     total += 0.05 * artistMap.get(key2);
                 }
             }
+            // Catch edge case where artists not linked at all by musical genre
             if (!artistMap.containsKey("genre") && !artistMap.containsKey("genre-ext")) total *= 0.5;
             map.put(key, total);
         }
+        
+        // Sort weighted sums and determine maximum value
 
         Set<Map.Entry<String, Double>> set = map.entrySet();
         List<Map.Entry<String, Double>> list = new ArrayList<>(set);
@@ -341,6 +369,7 @@ public class WikiArtistNetwork {
                 if (maxEntry == null) {
                     maxEntry = entry.getValue();
                 }
+                // Scoring as ratio of weighted sum to maximum weighted sum in results (float 1.0 > x > 0.0)
                 Double score = entry.getValue() / maxEntry;
                 recommendations.add(new AbstractMap.SimpleEntry<>(wikiToVevo.get(entry.getKey()), score.floatValue()));
                 count++;
@@ -430,6 +459,7 @@ public class WikiArtistNetwork {
      * @param max       maximum number of artist/score pairs per row (max number of recomendations)
      */
     public static void writeTableHeaders(PrintWriter writer, Integer max) {
+        // Variable number of columns, 2*max (Artist/Score) + 1 (Source)
         StringBuilder header = new StringBuilder();
         header.append("source");
         header.append(',');
@@ -507,6 +537,7 @@ public class WikiArtistNetwork {
         System.out.println("Num aritsts: " + artists.size());
         System.out.println("Num vertices: " + graph.vertexSet().size());
 
+        // Populate list of 'verified' (confident match) vevo artists to limit nodes which are scored by graph traversal
         for (int i = 0; i < artistJson.length(); i++) {
             JSONObject artist = artistJson.getJSONObject(i);
             if (artist.getBoolean("verified") && !artist.getString("title").equals("")) {
@@ -526,6 +557,8 @@ public class WikiArtistNetwork {
 //        String artist2 = "Anderson Paak";
 //
 //        List<Map.Entry<String, Float>> recommendations2 = getRecommendedArtists(artist2, 200);
+        
+        /* Generate artist recommendation table! Takes about 4 hours to run on 15k artists */
 
         Integer MAX_ARTISTS = 200;
         Integer numVerified = verifiedArtists.size();
