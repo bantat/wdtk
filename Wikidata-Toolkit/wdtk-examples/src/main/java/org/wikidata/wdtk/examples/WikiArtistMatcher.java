@@ -98,6 +98,7 @@ public class WikiArtistMatcher {
      * @throws IOException
      */
     public ArrayList<String> getWikiIdsFromArtistKeyword(String searchKeyword, String language) throws IOException {
+        // Wikibase API query parameters
         Map<String, String> params = new HashMap<>();
         params.put("action", "wbsearchentities");
         params.put("type", "item");
@@ -113,6 +114,7 @@ public class WikiArtistMatcher {
         JSONObject jsonWrapper = new JSONObject(writer.toString());
         JSONArray results = jsonWrapper.getJSONArray("search");
 
+        // Collect QIDs of items returned by search
         for (int i = 0; i < results.length(); i++) {
             JSONObject jsonResult = results.getJSONObject(i);
             wikiIds.add(jsonResult.get("id").toString());
@@ -132,6 +134,7 @@ public class WikiArtistMatcher {
      * @throws IOException
      */
     public ArrayList<String> getMoreWikiIdsFromArtistKeyword(String searchKeyword) throws IOException {
+        // Alternate wikibase API query, sometimes returns different results
         Map<String, String> params = new HashMap<>();
         params.put("action", "query");
         params.put("format", "json");
@@ -147,6 +150,7 @@ public class WikiArtistMatcher {
         JSONObject queryWrapper = jsonWrapper.getJSONObject("query");
         JSONArray results = queryWrapper.getJSONArray("search");
 
+        // Collect QIDs of items returned by search
         for (int i = 0; i < results.length(); i++) {
             JSONObject jsonResult = results.getJSONObject(i);
             wikiIds.add(jsonResult.get("title").toString());
@@ -166,9 +170,13 @@ public class WikiArtistMatcher {
      * @return              wiki QID which is the most confident match for the given artist
      */
     public String findWikiIdFromList(ArrayList<String> wikiIds, JSONObject artistJson) {
+        // Attempting to determine artist/band's QID, start with empty string
         String artistWikiId = "";
+        
+        // Map wikibase entity documents to their QIDs
         Map<String, EntityDocument> entities = Collections.emptyMap();
 
+        // Use WikiBase DataFetcher to get entity docs
         if (wikiIds.size() > 0) {
             try {
                 entities = wbdf.getEntityDocuments(wikiIds);
@@ -177,6 +185,7 @@ public class WikiArtistMatcher {
             }
         }
 
+        // Map potential QID to number of properties matched between VEVO artist and wiki entity
         Map<String, Integer> map = new HashMap<>();
 
         for (EntityDocument entity : entities.values()) {
@@ -186,7 +195,8 @@ public class WikiArtistMatcher {
                 if (matchCount > 0) map.put(itemDocument.getItemId().getId(), matchCount);
             }
         }
-
+        
+        // Sort map entries, and return QID with most property matches
         Map.Entry<String, Integer> maxEntry = null;
 
         for (Map.Entry<String, Integer> entry : map.entrySet()) {
@@ -211,13 +221,18 @@ public class WikiArtistMatcher {
      * @return                  number of properties shared between artist and wikidata document
      */
     public Integer propertyMatchCountFromDocument(ItemDocument artistDocument, JSONObject artistJson) {
+        // Tally number of properties which are shared between wiki artist item document, and VEVO artist
         int matchCount = 0;
+        
+        // Iterate through wiki 'statements' (statement is a property, value pair describing some attribute of wiki entity)
         for (StatementGroup sg : artistDocument.getStatementGroups()) {
             // "P31" is "instance of" on Wikidata
             if ("P31".equals(sg.getProperty().getId())) {
                 for (Statement s : sg.getStatements()) {
                     if (s.getClaim().getMainSnak() instanceof ValueSnak) {
                         Value v = ((ValueSnak) s.getClaim().getMainSnak()).getValue();
+                        
+                        // Determine if entity is a band/musician based on set of potential 'instance of' values
                         if (v instanceof ItemIdValue) {
                             if ("Q215380".equals(((ItemIdValue) v).getId())) {
                                 System.out.println("artist is a band");
@@ -244,6 +259,7 @@ public class WikiArtistMatcher {
                         }
                     }
                 }
+            // Determine if entity is band/musician based on 'occupation' property
             } else if ("P106".equals(sg.getProperty().getId())) {       // Occupation
                 for (Statement s : sg.getStatements()) {
                     if (s.getClaim().getMainSnak() instanceof ValueSnak) {
@@ -274,6 +290,7 @@ public class WikiArtistMatcher {
                         }
                     }
                 }
+            // Some VEVO artists have FB profile ID listed, use to match with wiki entity property
             } else if ("P2013".equals(sg.getProperty().getId())) {      // Facebook Profile ID
                 for (Statement s : sg.getStatements()) {
                     if (s.getClaim().getMainSnak() instanceof ValueSnak) {
@@ -286,6 +303,7 @@ public class WikiArtistMatcher {
                         }
                     }
                 }
+            // Some have twitter handles listed also
             } else if ("P2002".equals(sg.getProperty().getId())) {      // Twitter Username
                 for (Statement s : sg.getStatements()) {
                     if (s.getClaim().getMainSnak() instanceof ValueSnak) {
@@ -314,8 +332,11 @@ public class WikiArtistMatcher {
      * @throws IOException
      */
     public String findWikiIdFromArtistJson(JSONObject artistJson) throws IOException {
+        // Query set of potential wiki QIDs from EN wikidata
         ArrayList<String> ids = getWikiIdsFromArtistKeyword(artistJson.get("name").toString(), "en");
         System.out.println(ids);
+        
+        // Determine best guest QID match
         String wikiId = findWikiIdFromList(ids, artistJson);
         System.out.println(wikiId);
         if (ids.size() == 0 || wikiId.equals("")) {
@@ -325,6 +346,8 @@ public class WikiArtistMatcher {
                 Thread.currentThread().interrupt();
                 e.printStackTrace();
             }
+            
+            // If no solid guess found, strip vevo id and use as search keyword
             String searchKeyword = artistJson.get("vevo").toString();
             if (artistJson.get("vevo").toString().contains("-1")) {
                 searchKeyword = searchKeyword.replace("-1", "");
@@ -341,6 +364,8 @@ public class WikiArtistMatcher {
                     Thread.currentThread().interrupt();
                     e.printStackTrace();
                 }
+                
+                // If no solid guess found, expand search to spanish language query
                 ids = getWikiIdsFromArtistKeyword(artistJson.get("name").toString(), "es");
                 System.out.println(ids);
                 wikiId = findWikiIdFromList(ids, artistJson);
@@ -352,6 +377,8 @@ public class WikiArtistMatcher {
                         Thread.currentThread().interrupt();
                         e.printStackTrace();
                     }
+                    
+                    // Try spanish language query with stripped vevo id
                     ids = getWikiIdsFromArtistKeyword(searchKeyword, "es");
                     System.out.println(ids);
                     wikiId = findWikiIdFromList(ids, artistJson);
@@ -366,6 +393,8 @@ public class WikiArtistMatcher {
                 Thread.currentThread().interrupt();
                 e.printStackTrace();
             }
+            
+            // If no matches, use alternate query method for potentially different results
             ids = getMoreWikiIdsFromArtistKeyword(artistJson.get("name").toString());
             System.out.println(ids);
             wikiId = findWikiIdFromList(ids, artistJson);
@@ -403,6 +432,7 @@ public class WikiArtistMatcher {
 
         WikiArtistMatcher wiki = new WikiArtistMatcher();
 
+        // Filter Wikibase Datafetcher to EN, ENWiki
         wiki.wbdf.getFilter().setLanguageFilter(Collections.singleton("en"));
         wiki.wbdf.getFilter().setSiteLinkFilter(Collections.singleton("enwiki"));
 
@@ -418,9 +448,11 @@ public class WikiArtistMatcher {
         properties.add(((PropertyDocument) entityP2013).getPropertyId());
         properties.add(((PropertyDocument) entityP2002).getPropertyId());
 
+        // Limit properties returned by API calls to relevant fields
         wiki.wbdf.getFilter().setPropertyFilter(properties);
 
-
+        /* Below commented block loads Aurora artist data csv dump into artist JSONs, and searches for QIDs */
+        
 //        JSONObject artistJson = new JSONObject("{\"twitter\": \"thalia\",\"facebook\": \"Thalia\",\"wiki\": \"\",\"name\": \"ThalÃ\u00ADa\",\"vevo\": \"thalia-1\"}");
 //        System.out.println(wiki.findWikiIdFromArtistJson(artistJson));
 
